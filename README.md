@@ -46,6 +46,19 @@ ctxforge profile create reviewer --desc "Code review" --prompt "You are a code r
 ctxforge run reviewer
 ```
 
+## Built-in Slash Commands (Claude Code only)
+
+When using Claude Code as the active CLI, ctxforge generates `/project:ctx-*` slash commands:
+
+| Command | Description |
+|---------|-------------|
+| `/project:ctx-profile` | View current profile configuration |
+| `/project:ctx-files` | List key files with size info |
+| `/project:ctx-update` | AI suggests key file updates |
+| `/project:ctx-compress` | AI compresses verbose key files |
+
+These commands are not available for other CLIs (e.g. Codex).
+
 ## Notes
 
 ctxforge stores project and profile config files under `.ctxforge/`.

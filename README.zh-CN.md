@@ -46,6 +46,19 @@ ctxforge profile create reviewer --desc "Code review" --prompt "You are a code r
 ctxforge run reviewer
 ```
 
+## 内置斜杠命令（仅 Claude Code）
+
+当 Claude Code 为当前 CLI 时，ctxforge 会生成 `/project:ctx-*` 斜杠命令：
+
+| 命令 | 说明 |
+|------|------|
+| `/project:ctx-profile` | 查看当前 profile 配置 |
+| `/project:ctx-files` | 列出 key files 及大小信息 |
+| `/project:ctx-update` | AI 建议更新 key files |
+| `/project:ctx-compress` | AI 压缩冗长的 key files |
+
+这些命令对其他 CLI（如 Codex）不可用。
+
 ## 说明
 
 ctxforge 的项目与 profile 配置文件位于 `.ctxforge/` 目录。

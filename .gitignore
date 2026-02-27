@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.so
+# ctxforge runtime output (generated per-project)
+.ctxforge/
+
+# Internal design docs (not open sourced)
+design/
+
+# Claude Code memory
+.claude/

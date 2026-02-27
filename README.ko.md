@@ -46,6 +46,19 @@ ctxforge profile create reviewer --desc "Code review" --prompt "You are a code r
 ctxforge run reviewer
 ```
 
+## 내장 슬래시 명령어 (Claude Code 전용)
+
+Claude Code를 활성 CLI로 사용할 때, ctxforge는 `/project:ctx-*` 슬래시 명령어를 생성합니다:
+
+| 명령어 | 설명 |
+|--------|------|
+| `/project:ctx-profile` | 현재 프로필 설정 보기 |
+| `/project:ctx-files` | key files 목록과 크기 정보 |
+| `/project:ctx-update` | AI가 key files 업데이트 제안 |
+| `/project:ctx-compress` | AI가 장황한 key files 압축 |
+
+이 명령어들은 다른 CLI(예: Codex)에서는 사용할 수 없습니다.
+
 ## 참고
 
 ctxforge의 프로젝트/프로필 설정 파일은 `.ctxforge/` 아래에 저장됩니다.

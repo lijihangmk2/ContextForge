@@ -46,6 +46,19 @@ ctxforge profile create reviewer --desc "Code review" --prompt "You are a code r
 ctxforge run reviewer
 ```
 
+## 内蔵スラッシュコマンド（Claude Code のみ）
+
+Claude Code をアクティブ CLI として使用する場合、ctxforge は `/project:ctx-*` スラッシュコマンドを生成します：
+
+| コマンド | 説明 |
+|---------|------|
+| `/project:ctx-profile` | 現在の profile 設定を表示 |
+| `/project:ctx-files` | key files の一覧とサイズを表示 |
+| `/project:ctx-update` | AI が key files の更新を提案 |
+| `/project:ctx-compress` | AI が冗長な key files を圧縮 |
+
+これらのコマンドは他の CLI（例: Codex）では利用できません。
+
 ## メモ
 
 ctxforge のプロジェクト設定と profile 設定は `.ctxforge/` に保存されます。
