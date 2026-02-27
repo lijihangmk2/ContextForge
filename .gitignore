@@ -18,7 +18,9 @@ htmlcov/
 .ctxforge/
 
 # Internal design docs (not open sourced)
-design/
+docs/DESIGN.md
+docs/DEVPLAN.md
+docs/token
 
 # Claude Code memory
 .claude/

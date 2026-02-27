@@ -1,10 +1,10 @@
 [project]
 name = "ctxforge"
-version = "0.2.0"
+version = "1.0.0"
 description = "AI role-matrix context manager — define AI profiles and inject context into any AI CLI."
 requires-python = ">=3.11"
 license = "MIT"
-readme = "README.md"
+readme = "docs/PYPI.md"
 keywords = ["ai", "context", "cli", "developer-tools", "llm"]
 authors = [
     { name = "lijihangmk2" },
@@ -47,7 +47,7 @@ packages = ["src/ctxforge"]
 # --- Poetry dev config (optional, only for contributors using poetry) ---
 [tool.poetry]
 name = "ctxforge"
-version = "0.2.0"
+version = "1.0.0"
 description = "dev-only"
 authors = ["lijihangmk2"]
 packages = [{include = "ctxforge", from = "src"}]

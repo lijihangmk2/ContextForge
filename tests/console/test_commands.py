@@ -256,4 +256,4 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "0.2.0" in result.output
+        assert "1.0.0" in result.output
