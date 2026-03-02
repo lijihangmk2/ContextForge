@@ -18,7 +18,6 @@ class CliConfig(BaseModel):
 
 
 class DefaultsConfig(BaseModel):
-    profile: str | None = None
     language: str | None = None  # output language preference, e.g. "中文", "English"
     model: str | None = None  # LLM model for project analysis, e.g. "gpt-4o-mini"
 

@@ -27,7 +27,15 @@ CTXFORGE_DIR = ".ctxforge"
 
 
 def _prompt(text: str, default: str = "") -> str:
-    """Prompt for input bypassing readline (fixes CJK backspace display)."""
+    """Prompt for input with proper CJK wide-character handling."""
+    if sys.stdin.isatty():
+        import questionary  # lazy — avoid import for commands that don't use init
+
+        result = questionary.text(text, default=default).ask()
+        if result is None:
+            return default
+        return result.strip() or default
+    # Fallback for piped input (tests, CI)
     if default:
         console.print(f"{text} \\[{default}]: ", end="")
     else:
@@ -227,9 +235,8 @@ def init_command(
             )
             if not _confirm("Create a new profile?"):
                 # Skip profile creation, just update project.toml
-                profile_name = existing[0]
                 _write_project_toml(
-                    ctxforge_dir, report, cli_config, profile_name, language
+                    ctxforge_dir, report, cli_config, language
                 )
                 console.print(
                     f"\n[bold green]Done.[/bold green] Updated {CTXFORGE_DIR}/project.toml"
@@ -253,7 +260,7 @@ def init_command(
     profile_desc = _prompt("Description")
 
     # ── Write project.toml ───────────────────────────────────────────────
-    _write_project_toml(ctxforge_dir, report, cli_config, profile_name, language)
+    _write_project_toml(ctxforge_dir, report, cli_config, language)
 
     # ── Write profile ────────────────────────────────────────────────────
     pm.create(
@@ -278,7 +285,6 @@ def _write_project_toml(
     ctxforge_dir: Path,
     report: ScanReport,
     cli_config: CliConfig,
-    profile_name: str,
     language: str,
     model: str = "",
 ) -> None:
@@ -289,7 +295,6 @@ def _write_project_toml(
         ),
         cli=cli_config,
         defaults=DefaultsConfig(
-            profile=profile_name,
             language=language,
             model=model or None,
         ),

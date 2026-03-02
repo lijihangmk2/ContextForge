@@ -40,13 +40,10 @@ def list_command() -> None:
         console.print("[yellow]No profiles found.[/yellow]")
         return
 
-    default = project.config.defaults.profile
     table = Table(title="Profiles")
     table.add_column("Name")
-    table.add_column("Default")
     for name in names:
-        marker = "*" if name == default else ""
-        table.add_row(name, marker)
+        table.add_row(name)
     console.print(table)
 
 

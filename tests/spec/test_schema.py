@@ -25,23 +25,23 @@ class TestProjectConfig:
         assert config.project.description == ""
         assert config.cli.detected == []
         assert config.cli.active is None
-        assert config.defaults.profile is None
+        assert config.defaults.language is None
 
     def test_full(self):
         config = ProjectConfig(
             project=ProjectSection(name="my-app", description="A test app"),
             cli=CliConfig(detected=["claude", "codex"], active="claude"),
-            defaults=DefaultsConfig(profile="architect"),
+            defaults=DefaultsConfig(language="English"),
         )
         assert config.project.name == "my-app"
         assert config.cli.active == "claude"
-        assert config.defaults.profile == "architect"
+        assert config.defaults.language == "English"
 
     def test_from_dict(self):
         data = {
             "project": {"name": "test", "description": "desc"},
             "cli": {"detected": ["claude"], "active": "claude"},
-            "defaults": {"profile": "default"},
+            "defaults": {"language": "Chinese"},
         }
         config = ProjectConfig.model_validate(data)
         assert config.project.name == "test"

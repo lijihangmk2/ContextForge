@@ -13,7 +13,7 @@ class TestWriteProject:
         config = ProjectConfig(
             project=ProjectSection(name="my-app"),
             cli=CliConfig(detected=["claude"], active="claude"),
-            defaults=DefaultsConfig(profile="default"),
+            defaults=DefaultsConfig(language="English"),
         )
         write_project(path, config)
         assert path.exists()

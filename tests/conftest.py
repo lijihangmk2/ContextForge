@@ -27,7 +27,7 @@ def ctxforge_project(tmp_path: Path) -> Path:
     project_config = ProjectConfig(
         project=ProjectSection(name="test-project"),
         cli=CliConfig(detected=["claude"], active="claude"),
-        defaults=DefaultsConfig(profile="default"),
+        defaults=DefaultsConfig(),
     )
     write_project(ctxforge_dir / "project.toml", project_config)
 

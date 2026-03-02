@@ -55,21 +55,23 @@ class TestProfileManager:
         profiles_dir = tmp_path / "profiles"
         pm = ProfileManager(profiles_dir)
         pm.create(name="architect")
-        assert pm.resolve("architect", None) == "architect"
-
-    def test_resolve_default(self, tmp_path: Path):
-        profiles_dir = tmp_path / "profiles"
-        pm = ProfileManager(profiles_dir)
-        pm.create(name="default")
-        assert pm.resolve(None, "default") == "default"
+        assert pm.resolve("architect") == "architect"
 
     def test_resolve_single_profile(self, tmp_path: Path):
         profiles_dir = tmp_path / "profiles"
         pm = ProfileManager(profiles_dir)
         pm.create(name="only-one")
-        assert pm.resolve(None, None) == "only-one"
+        assert pm.resolve(None) == "only-one"
+
+    def test_resolve_multiple_profiles_error(self, tmp_path: Path):
+        profiles_dir = tmp_path / "profiles"
+        pm = ProfileManager(profiles_dir)
+        pm.create(name="a")
+        pm.create(name="b")
+        with pytest.raises(ProfileNotFoundError):
+            pm.resolve(None)
 
     def test_resolve_no_profile_error(self, tmp_path: Path):
         pm = ProfileManager(tmp_path / "profiles")
         with pytest.raises(ProfileNotFoundError):
-            pm.resolve(None, None)
+            pm.resolve(None)

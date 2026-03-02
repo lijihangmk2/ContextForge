@@ -35,8 +35,7 @@ class TestPromptBuilder:
         )
         profile.key_files.paths = ["main.py"]
         result = builder.build(profile, "explain")
-        assert "main.py" in result
-        assert "print('hi')" in result
+        assert "- main.py" in result
 
     def test_build_system(self, tmp_path: Path):
         builder = PromptBuilder(tmp_path)

@@ -60,14 +60,18 @@ class SimpleInjection:
     def _files_section(self, profile: ProfileConfig) -> str:
         if not profile.key_files.paths:
             return ""
-        sections: list[str] = []
+        lines: list[str] = []
         for rel_path in profile.key_files.paths:
             full = self._root / rel_path
             if full.is_file():
-                self._append_file(sections, rel_path, full)
-        if not sections:
+                lines.append(f"- {rel_path}")
+        if not lines:
             return ""
-        return "[Key Files]\n" + "\n\n".join(sections)
+        header = (
+            "[Key Files]\n"
+            "Read the following files to understand the project context:"
+        )
+        return header + "\n" + "\n".join(lines)
 
     @staticmethod
     def _language_section(language: str | None) -> str:
@@ -83,13 +87,13 @@ class SimpleInjection:
         """
         if not profile.injection.greeting:
             return ""
-        file_list = ", ".join(profile.key_files.paths) if profile.key_files.paths else ""
         role_name = profile.profile.name
         lang_hint = f" Respond in {language}." if language else ""
         parts = [
             f"You are now operating as profile \"{role_name}\".",
         ]
-        if file_list:
+        if profile.key_files.paths:
+            file_list = ", ".join(profile.key_files.paths)
             parts.append(f"Key files loaded: {file_list}.")
         parts.append(
             "Briefly confirm (2-3 lines) that you have received this context "
@@ -97,11 +101,3 @@ class SimpleInjection:
         )
         return " ".join(parts)
 
-    def _append_file(
-        self, sections: list[str], rel_path: str, full: Path
-    ) -> None:
-        try:
-            content = full.read_text(encoding="utf-8")
-        except Exception:
-            content = f"(failed to read {rel_path})"
-        sections.append(f"--- {rel_path} ---\n{content}")

@@ -41,8 +41,7 @@ class TestSimpleInjection:
         inj = SimpleInjection(tmp_path)
         profile = _make_profile(key_files=["readme.md"])
         result = inj.build(profile, "summarize")
-        assert "--- readme.md ---" in result
-        assert "# Hello" in result
+        assert "- readme.md" in result
 
     def test_missing_key_file_skipped(self, tmp_path: Path):
         inj = SimpleInjection(tmp_path)
@@ -57,6 +56,7 @@ class TestSimpleInjection:
             role_prompt="Be helpful.", key_files=["f.txt"], order="files_first"
         )
         result = inj.build(profile, "do stuff")
+        assert "- f.txt" in result
         files_pos = result.index("[Key Files]")
         role_pos = result.index("[Role: test]")
         assert files_pos < role_pos
@@ -86,8 +86,7 @@ class TestBuildSystem:
         result = inj.build_system(profile)
         assert "[Role: test]" in result
         assert "You are a reviewer." in result
-        assert "--- readme.md ---" in result
-        assert "# Project" in result
+        assert "- readme.md" in result
 
     def test_build_system_with_language(self, tmp_path: Path):
         inj = SimpleInjection(tmp_path)

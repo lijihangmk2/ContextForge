@@ -2,18 +2,40 @@
 
 from __future__ import annotations
 
+import sys
+
 import typer
 from rich.console import Console
 
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
 from ctxforge.core.prompt_builder import PromptBuilder
-from ctxforge.exceptions import CForgeError, ProjectNotFoundError
+from ctxforge.exceptions import CForgeError, ProfileNotFoundError, ProjectNotFoundError
 from ctxforge.runner.registry import get_runner
 from ctxforge.spec.schema import ProfileConfig
 from ctxforge.storage.commands_writer import write_commands
 
 console = Console()
+
+
+def _choose_profile(names: list[str]) -> str:
+    """Let the user pick a profile interactively."""
+    if sys.stdin.isatty():
+        import questionary  # lazy import
+
+        result = questionary.select("Select profile:", choices=names).ask()
+        if result is None:
+            raise typer.Exit(0)
+        return result
+    # Fallback for piped input (tests, CI)
+    console.print("Select profile:")
+    for i, name in enumerate(names, 1):
+        console.print(f"  [{i}] {name}")
+    value = sys.stdin.readline().strip()
+    try:
+        return names[int(value) - 1]
+    except (ValueError, IndexError):
+        return names[0]
 
 
 def _print_injection_summary(
@@ -72,7 +94,22 @@ def run_command(
 
     pm = ProfileManager(project.profiles_dir)
     try:
-        resolved = pm.resolve(profile, project.config.defaults.profile)
+        resolved = pm.resolve(profile)
+    except ProfileNotFoundError:
+        # Multiple profiles, none specified — let user choose
+        names = pm.list_names()
+        if len(names) > 1:
+            resolved = _choose_profile(names)
+        else:
+            console.print(
+                "[red]Error:[/red] No profile specified and no default configured."
+            )
+            raise typer.Exit(1)
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    try:
         profile_config = pm.load(resolved)
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")

@@ -64,21 +64,19 @@ class ProfileManager:
         write_profile(profile_path, config)
         return config
 
-    def resolve(self, name: str | None, default: str | None) -> str:
-        """Resolve a profile name: explicit > default > error.
+    def resolve(self, name: str | None) -> str:
+        """Resolve a profile name: explicit > single-profile auto > error.
 
         Raises:
             ProfileNotFoundError: If no profile can be resolved or profile doesn't exist.
         """
-        resolved = name or default
-        if not resolved:
-            names = self.list_names()
-            if len(names) == 1:
-                resolved = names[0]
-            else:
-                raise ProfileNotFoundError(
-                    "No profile specified and no default configured"
-                )
-        if not self.exists(resolved):
-            raise ProfileNotFoundError(f"Profile '{resolved}' not found")
-        return resolved
+        if name:
+            if not self.exists(name):
+                raise ProfileNotFoundError(f"Profile '{name}' not found")
+            return name
+        names = self.list_names()
+        if len(names) == 1:
+            return names[0]
+        raise ProfileNotFoundError(
+            "Multiple profiles found — please specify one"
+        )
