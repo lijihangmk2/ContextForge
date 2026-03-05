@@ -23,11 +23,14 @@ def write_commands(project_root: Path, profile_name: str, cli_name: str) -> None
     commands_dir.mkdir(parents=True, exist_ok=True)
 
     profile_path = f".ctxforge/profiles/{profile_name}/profile.toml"
+    pitfalls_path = f".ctxforge/profiles/{profile_name}/pitfalls.md"
 
-    _write(commands_dir / "ctx-profile.md", _CTX_PROFILE.format(profile_path=profile_path))
-    _write(commands_dir / "ctx-files.md", _CTX_FILES.format(profile_path=profile_path))
-    _write(commands_dir / "ctx-update.md", _CTX_UPDATE.format(profile_path=profile_path))
-    _write(commands_dir / "ctx-compress.md", _CTX_COMPRESS.format(profile_path=profile_path))
+    _write(commands_dir / "ctx-profile.md", CTX_PROFILE.format(profile_path=profile_path))
+    _write(commands_dir / "ctx-files.md", CTX_FILES.format(profile_path=profile_path))
+    _write(commands_dir / "ctx-update.md", CTX_UPDATE.format(
+        profile_path=profile_path, pitfalls_path=pitfalls_path,
+    ))
+    _write(commands_dir / "ctx-compress.md", CTX_COMPRESS.format(profile_path=profile_path))
 
 
 def _write(path: Path, content: str) -> None:
@@ -36,7 +39,7 @@ def _write(path: Path, content: str) -> None:
 
 # ── Prompt templates ─────────────────────────────────────────────────────────
 
-_CTX_PROFILE = """\
+CTX_PROFILE = """\
 Read the ctxforge profile at `{profile_path}` and display:
 - Profile name and description
 - Role prompt (if set)
@@ -44,24 +47,30 @@ Read the ctxforge profile at `{profile_path}` and display:
 - Injection settings (strategy, order, greeting)
 """
 
-_CTX_FILES = """\
+CTX_FILES = """\
 List all key files configured in `{profile_path}` under `[key_files]`.
 For each file, show whether it exists and its approximate size (lines and characters).
 """
 
-_CTX_UPDATE = """\
-Review the current project structure and the key files list in `{profile_path}`.
-Analyze what context files would be most valuable for understanding this project.
-Then update the `paths` array in the `[key_files]` section of `{profile_path}`.
+CTX_UPDATE = """\
+Read the key files listed in `{profile_path}` under `[key_files]`.
+Based on the changes made in the current session, identify which key files have \
+outdated or inaccurate content and update them to reflect the current state of the codebase.
 Rules:
-- Only add individual files, never directories
-- Prefer documentation files (.md) and key source entry points
-- Remove files that no longer exist
-- Keep the total context concise — avoid large generated files
+- Only update files whose content is actually stale relative to the current session changes
+- Preserve the existing structure and style of each file
+- Do NOT rewrite files that are already accurate
+- Show a brief summary of what you changed in each file
 - $ARGUMENTS
+
+Additionally, review the current session for any non-obvious pitfalls, gotchas, \
+or lessons learned (e.g., unexpected behavior, tricky configurations, \
+environment-specific issues). Append new findings to `{pitfalls_path}` \
+(create the file if it doesn't exist). Keep entries concise and actionable. \
+Do not duplicate entries already present in the file.
 """
 
-_CTX_COMPRESS = """\
+CTX_COMPRESS = """\
 Read all key files listed in `{profile_path}` under `[key_files]`.
 For each file:
 1. Show its current size (lines and characters)

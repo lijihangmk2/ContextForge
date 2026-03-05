@@ -35,6 +35,18 @@ class TestCodexRunner:
             )
         assert result.ok
 
+    def test_run_auto_approve(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+            result = runner.run("system context", auto_approve=True)
+            mock_run.assert_called_once_with(
+                ["codex", "--approval-mode", "full-auto", "system context"],
+            )
+        assert result.ok
+
     def test_run_empty_system_prompt(self):
         runner = CodexRunner()
         mock_result = MagicMock()
@@ -60,6 +72,36 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.run", side_effect=FileNotFoundError):
             with pytest.raises(RunnerError, match="not found"):
                 runner.run("test")
+
+    def test_run_oneshot_success(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+            result = runner.run_oneshot("compress key files")
+            mock_run.assert_called_once_with(
+                ["codex", "compress key files"],
+            )
+        assert result.ok
+
+    def test_run_oneshot_auto_approve(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+            result = runner.run_oneshot("compress key files", auto_approve=True)
+            mock_run.assert_called_once_with(
+                ["codex", "--approval-mode", "full-auto", "compress key files"],
+            )
+        assert result.ok
+
+    def test_run_oneshot_not_found(self):
+        runner = CodexRunner()
+        with patch("ctxforge.runner.codex.subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(RunnerError, match="not found"):
+                runner.run_oneshot("test")
 
     def test_name(self):
         assert CodexRunner.name == "codex"

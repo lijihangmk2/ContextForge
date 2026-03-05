@@ -17,17 +17,38 @@ class CodexRunner:
 
     name: str = "codex"
 
-    def run(self, system_prompt: str, initial_prompt: str = "") -> RunResult:
+    def run(
+        self, system_prompt: str, initial_prompt: str = "",
+        *, auto_approve: bool = False,
+    ) -> RunResult:
         """Start an interactive ``codex`` session.
 
         *system_prompt* and *initial_prompt* are merged into a single
         positional argument since Codex only accepts ``[PROMPT]``.
         """
         cmd: list[str] = ["codex"]
+        if auto_approve:
+            cmd.extend(["--approval-mode", "full-auto"])
 
         combined = "\n\n".join(p for p in [system_prompt, initial_prompt] if p)
         if combined:
             cmd.append(combined)
+
+        try:
+            proc = subprocess.run(cmd)
+        except FileNotFoundError as e:
+            raise RunnerError("codex CLI not found on PATH") from e
+        except Exception as e:
+            raise RunnerError(f"Failed to run codex: {e}") from e
+
+        return RunResult(exit_code=proc.returncode, stdout="", stderr="")
+
+    def run_oneshot(self, prompt: str, *, auto_approve: bool = False) -> RunResult:
+        """Run a single non-interactive ``codex`` command."""
+        cmd: list[str] = ["codex"]
+        if auto_approve:
+            cmd.extend(["--approval-mode", "full-auto"])
+        cmd.append(prompt)
 
         try:
             proc = subprocess.run(cmd)

@@ -13,7 +13,10 @@ class ClaudeRunner:
 
     name: str = "claude"
 
-    def run(self, system_prompt: str, initial_prompt: str = "") -> RunResult:
+    def run(
+        self, system_prompt: str, initial_prompt: str = "",
+        *, auto_approve: bool = False,
+    ) -> RunResult:
         """Start an interactive ``claude`` session.
 
         When *system_prompt* is non-empty it is passed via
@@ -24,10 +27,28 @@ class ClaudeRunner:
         argument so Claude immediately processes it on session start.
         """
         cmd: list[str] = ["claude"]
+        if auto_approve:
+            cmd.append("--dangerously-skip-permissions")
         if system_prompt:
             cmd.extend(["--append-system-prompt", system_prompt])
         if initial_prompt:
             cmd.append(initial_prompt)
+
+        try:
+            proc = subprocess.run(cmd)
+        except FileNotFoundError as e:
+            raise RunnerError("claude CLI not found on PATH") from e
+        except Exception as e:
+            raise RunnerError(f"Failed to run claude: {e}") from e
+
+        return RunResult(exit_code=proc.returncode, stdout="", stderr="")
+
+    def run_oneshot(self, prompt: str, *, auto_approve: bool = False) -> RunResult:
+        """Run a single non-interactive ``claude -p`` command."""
+        cmd: list[str] = ["claude"]
+        if auto_approve:
+            cmd.append("--dangerously-skip-permissions")
+        cmd.extend(["-p", prompt])
 
         try:
             proc = subprocess.run(cmd)

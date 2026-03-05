@@ -12,7 +12,7 @@ runner = CliRunner()
 
 class TestInitCommand:
     def test_init_creates_structure(self, tmp_path: Path):
-        # language → detect (empty) → key files prompt → profile name → description
+        # language → key files prompt → profile name → description → auto_approve → decline run
         with (
             patch("ctxforge.console.commands.init.detect_ai_clis", return_value=["claude"]),
             patch("ctxforge.console.commands.init.detect_doc_candidates", return_value=[]),
@@ -20,14 +20,14 @@ class TestInitCommand:
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\n\ndefault\nGeneral assistant\n",
+                input="English\n\ndefault\nGeneral assistant\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".ctxforge" / "project.toml").exists()
         assert (tmp_path / ".ctxforge" / "profiles" / "default" / "profile.toml").exists()
 
     def test_init_no_cli(self, tmp_path: Path):
-        # language → detect (empty) → key files prompt → profile name → description
+        # language → key files prompt → profile name → description → auto_approve → decline run
         with (
             patch("ctxforge.console.commands.init.detect_ai_clis", return_value=[]),
             patch("ctxforge.console.commands.init.detect_doc_candidates", return_value=[]),
@@ -35,7 +35,7 @@ class TestInitCommand:
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\n\ndefault\n\n",
+                input="English\n\ndefault\n\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
         assert "No AI CLI tools detected" in result.output
@@ -54,11 +54,11 @@ class TestInitCommand:
                 return_value=candidates,
             ),
         ):
-            # language → (checkbox mocked) → profile name → description
+            # language → (checkbox mocked) → profile name → description → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\ndefault\nGeneral assistant\n",
+                input="English\ndefault\nGeneral assistant\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
         mock_detect.assert_called_once()
@@ -77,11 +77,11 @@ class TestInitCommand:
                 return_value=[],
             ),
         ):
-            # language → (checkbox mocked) → profile name → description
+            # language → (checkbox mocked) → profile name → description → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\ndefault\n\n",
+                input="English\ndefault\n\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
 
@@ -99,11 +99,11 @@ class TestInitCommand:
                 return_value=["README.md"],
             ),
         ):
-            # language → (checkbox mocked) → profile name → description
+            # language → (checkbox mocked) → profile name → description → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\ndefault\n\n",
+                input="English\ndefault\n\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
 
@@ -121,11 +121,11 @@ class TestInitCommand:
                 return_value=["README.md", "pyproject.toml"],
             ),
         ):
-            # language → (checkbox mocked) → profile name → description
+            # language → (checkbox mocked) → profile name → description → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(tmp_path)],
-                input="English\ndefault\n\n",
+                input="English\ndefault\n\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
 
@@ -148,16 +148,43 @@ class TestInitCommand:
             patch("ctxforge.console.commands.init.detect_ai_clis", return_value=["claude"]),
             patch("ctxforge.console.commands.init.detect_doc_candidates", return_value=[]),
         ):
-            # language → accept new profile → key files prompt → name → desc
+            # language → accept new profile → key files prompt → name → desc → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(ctxforge_project)],
-                input="English\ny\n\nreviewer\nCode review\n",
+                input="English\ny\n\nreviewer\nCode review\nn\nn\n",
             )
         assert result.exit_code == 0, result.output
         assert (
             ctxforge_project / ".ctxforge" / "profiles" / "reviewer" / "profile.toml"
         ).exists()
+
+
+class TestLaunchSession:
+    def test_launch_session_normal(self, ctxforge_project: Path):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result):
+            from ctxforge.console.commands.run import launch_session
+
+            exit_code = launch_session(ctxforge_project, "default")
+        assert exit_code == 0
+
+    def test_launch_session_compress(self, ctxforge_project: Path):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run:
+            from ctxforge.console.commands.run import launch_session
+
+            exit_code = launch_session(ctxforge_project, "default", compress=True)
+        assert exit_code == 0
+        # Verify compress greeting was used (contains "compress" keyword)
+        call_args = mock_run.call_args[0][0]
+        # The greeting is passed via -p flag
+        full_cmd = " ".join(call_args)
+        assert "compress" in full_cmd.lower()
 
 
 class TestRunCommand:
@@ -256,4 +283,46 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.0.0" in result.output
+        assert "1.1.1" in result.output
+
+
+class TestSetProcTitle:
+    def test_main_calls_setproctitle(self):
+        """main() sets the process title to 'ctxforge'."""
+        with (
+            patch("ctxforge.console.application.setproctitle") as mock_spt,
+            patch("ctxforge.console.application.app"),
+            patch("ctxforge.console.application.sys") as mock_sys,
+        ):
+            mock_sys.stdout.isatty.return_value = False
+            from ctxforge.console.application import main
+
+            main()
+            mock_spt.assert_called_once_with("ctxforge")
+
+    def test_osc_escape_written_when_tty(self):
+        """OSC title escape is written when stdout is a tty."""
+        with (
+            patch("ctxforge.console.application.setproctitle"),
+            patch("ctxforge.console.application.app"),
+            patch("ctxforge.console.application.sys") as mock_sys,
+        ):
+            mock_sys.stdout.isatty.return_value = True
+            from ctxforge.console.application import main
+
+            main()
+            mock_sys.stdout.write.assert_called_once_with("\033]0;ctxforge\007")
+            mock_sys.stdout.flush.assert_called_once()
+
+    def test_osc_escape_skipped_when_not_tty(self):
+        """OSC title escape is skipped when stdout is not a tty."""
+        with (
+            patch("ctxforge.console.application.setproctitle"),
+            patch("ctxforge.console.application.app"),
+            patch("ctxforge.console.application.sys") as mock_sys,
+        ):
+            mock_sys.stdout.isatty.return_value = False
+            from ctxforge.console.application import main
+
+            main()
+            mock_sys.stdout.write.assert_not_called()

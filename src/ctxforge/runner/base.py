@@ -24,6 +24,16 @@ class CliRunner(Protocol):
 
     name: str
 
-    def run(self, system_prompt: str, initial_prompt: str = "") -> RunResult:
+    def run(
+        self,
+        system_prompt: str,
+        initial_prompt: str = "",
+        *,
+        auto_approve: bool = False,
+    ) -> RunResult:
         """Execute the AI CLI with the given system prompt."""
+        ...
+
+    def run_oneshot(self, prompt: str, *, auto_approve: bool = False) -> RunResult:
+        """Run a single non-interactive prompt."""
         ...

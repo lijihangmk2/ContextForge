@@ -6,7 +6,12 @@ from pathlib import Path
 
 from ctxforge.exceptions import ProfileNotFoundError
 from ctxforge.spec.loader import load_profile
-from ctxforge.spec.schema import ProfileConfig, ProfileSection
+from ctxforge.spec.schema import (
+    CURRENT_PROFILE_VERSION,
+    ProfileCliSection,
+    ProfileConfig,
+    ProfileSection,
+)
 from ctxforge.storage.profile_writer import write_profile
 
 
@@ -15,6 +20,10 @@ class ProfileManager:
 
     def __init__(self, profiles_dir: Path) -> None:
         self._dir = profiles_dir
+
+    @property
+    def profiles_dir(self) -> Path:
+        return self._dir
 
     def list_names(self) -> list[str]:
         """Return sorted list of profile names (directory names)."""
@@ -28,6 +37,10 @@ class ProfileManager:
 
     def exists(self, name: str) -> bool:
         return (self._dir / name / "profile.toml").exists()
+
+    def profile_path(self, name: str) -> Path:
+        """Return the path to a profile's profile.toml."""
+        return self._dir / name / "profile.toml"
 
     def load(self, name: str) -> ProfileConfig:
         """Load a profile by name.
@@ -46,6 +59,8 @@ class ProfileManager:
         description: str = "",
         role_prompt: str = "",
         key_files: list[str] | None = None,
+        cli_name: str | None = None,
+        auto_approve: bool = False,
     ) -> ProfileConfig:
         """Create a new profile and write it to disk.
 
@@ -53,12 +68,17 @@ class ProfileManager:
             The created ProfileConfig.
         """
         config = ProfileConfig(
+            schema_version=CURRENT_PROFILE_VERSION,
             profile=ProfileSection(name=name, description=description),
         )
         if role_prompt:
             config.role.prompt = role_prompt
         if key_files:
             config.key_files.paths = key_files
+        if cli_name or auto_approve:
+            config.cli = ProfileCliSection(
+                name=cli_name, auto_approve=auto_approve,
+            )
 
         profile_path = self._dir / name / "profile.toml"
         write_profile(profile_path, config)

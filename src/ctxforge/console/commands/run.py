@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
+from setproctitle import setproctitle
 
+from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
 from ctxforge.core.prompt_builder import PromptBuilder
@@ -69,6 +72,81 @@ def _print_injection_summary(
     console.print()
 
 
+def _ensure_migrated(
+    pm: ProfileManager,
+    profile_name: str,
+    project: Project,
+) -> ProfileConfig:
+    """Load a profile and run migration if needed."""
+    profile_config = pm.load(profile_name)
+    if needs_migration(profile_config):
+        profile_config = migrate_profile(
+            profile_config,
+            project.config,
+            pm.profile_path(profile_name),
+        )
+    return profile_config
+
+
+def launch_session(
+    project_root: Path,
+    profile_name: str,
+    compress: bool = False,
+) -> int:
+    """Launch an AI CLI session. Returns exit code."""
+    project = Project.load(project_root)
+    pm = ProfileManager(project.profiles_dir)
+    profile_config = _ensure_migrated(pm, profile_name, project)
+
+    cli_name = profile_config.cli.name
+    if not cli_name:
+        # Fallback to project-level for un-migrated edge cases
+        cli_name = project.config.cli.active
+    if not cli_name:
+        console.print("[red]Error:[/red] No CLI configured for this profile.")
+        return 1
+
+    builder = PromptBuilder(project.root)
+    language = project.config.defaults.language
+    system_prompt = builder.build_system(profile_config, language)
+
+    if compress:
+        greeting = builder.build_compress_greeting(profile_config, language)
+    else:
+        greeting = builder.build_greeting(profile_config, language)
+
+    # ── Sync slash commands for this profile (claude only) ──────────────
+    write_commands(project.root, profile_name, cli_name)
+
+    _print_injection_summary(
+        profile_name, cli_name, profile_config, system_prompt, language,
+    )
+
+    # Set terminal title to show the active profile
+    setproctitle(profile_name)
+    if sys.stdout.isatty():
+        sys.stdout.write(f"\033]0;{profile_name}\007")
+        sys.stdout.flush()
+
+    try:
+        runner = get_runner(cli_name)
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return 1
+
+    auto_approve = profile_config.cli.auto_approve
+
+    try:
+        result = runner.run(
+            system_prompt, greeting, auto_approve=auto_approve,
+        )
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        return 1
+
+    return 0 if result.ok else result.exit_code
+
+
 def run_command(
     profile: str | None = typer.Argument(
         None, help="Profile name (uses default if omitted)."
@@ -109,38 +187,6 @@ def run_command(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    try:
-        profile_config = pm.load(resolved)
-    except CForgeError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    cli_name = project.config.cli.active
-    if not cli_name:
-        console.print("[red]Error:[/red] No active CLI configured.")
-        raise typer.Exit(1)
-
-    builder = PromptBuilder(project.root)
-    language = project.config.defaults.language
-    system_prompt = builder.build_system(profile_config, language)
-    greeting = builder.build_greeting(profile_config, language)
-
-    # ── Sync slash commands for this profile (claude only) ──────────────
-    write_commands(project.root, resolved, cli_name)
-
-    _print_injection_summary(resolved, cli_name, profile_config, system_prompt, language)
-
-    try:
-        runner = get_runner(cli_name)
-    except CForgeError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    try:
-        result = runner.run(system_prompt, greeting)
-    except CForgeError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-
-    if not result.ok:
-        raise typer.Exit(result.exit_code)
+    exit_code = launch_session(project.root, resolved)
+    if exit_code != 0:
+        raise typer.Exit(exit_code)

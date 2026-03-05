@@ -78,6 +78,52 @@ class TestSimpleInjection:
         assert "[Key Files]" not in result
 
 
+class TestPitfallsSection:
+    def test_pitfalls_section_no_file(self, tmp_path: Path):
+        inj = SimpleInjection(tmp_path)
+        profile = _make_profile(role_prompt="Be helpful.")
+        result = inj._pitfalls_section(profile)
+        assert result == ""
+
+    def test_pitfalls_section_with_file(self, tmp_path: Path):
+        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        pitfalls_dir.mkdir(parents=True)
+        (pitfalls_dir / "pitfalls.md").write_text("- Watch out for X\n")
+        inj = SimpleInjection(tmp_path)
+        profile = _make_profile()
+        result = inj._pitfalls_section(profile)
+        assert result == "[Pitfalls]\n- Watch out for X"
+
+    def test_pitfalls_section_empty_file(self, tmp_path: Path):
+        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        pitfalls_dir.mkdir(parents=True)
+        (pitfalls_dir / "pitfalls.md").write_text("   \n  ")
+        inj = SimpleInjection(tmp_path)
+        profile = _make_profile()
+        result = inj._pitfalls_section(profile)
+        assert result == ""
+
+    def test_build_includes_pitfalls(self, tmp_path: Path):
+        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        pitfalls_dir.mkdir(parents=True)
+        (pitfalls_dir / "pitfalls.md").write_text("- Pitfall A\n")
+        inj = SimpleInjection(tmp_path)
+        profile = _make_profile(role_prompt="Be helpful.")
+        result = inj.build(profile, "do stuff")
+        assert "[Pitfalls]" in result
+        assert "- Pitfall A" in result
+
+    def test_build_system_includes_pitfalls(self, tmp_path: Path):
+        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        pitfalls_dir.mkdir(parents=True)
+        (pitfalls_dir / "pitfalls.md").write_text("- Pitfall B\n")
+        inj = SimpleInjection(tmp_path)
+        profile = _make_profile(role_prompt="Be helpful.")
+        result = inj.build_system(profile)
+        assert "[Pitfalls]" in result
+        assert "- Pitfall B" in result
+
+
 class TestBuildSystem:
     def test_build_system_role_and_files(self, tmp_path: Path):
         (tmp_path / "readme.md").write_text("# Project")
@@ -145,3 +191,23 @@ class TestBuildGreeting:
         profile = _make_profile(greeting=False)
         result = inj.build_greeting(profile)
         assert result == ""
+
+
+class TestBuildCompressGreeting:
+    def test_compress_greeting_basic(self, tmp_path: Path):
+        profile = _make_profile(key_files=["readme.md", "design.md"])
+        result = SimpleInjection.build_compress_greeting(profile)
+        assert '"test"' in result
+        assert "readme.md" in result
+        assert "design.md" in result
+        assert "compress" in result.lower()
+
+    def test_compress_greeting_with_language(self, tmp_path: Path):
+        profile = _make_profile(key_files=["readme.md"])
+        result = SimpleInjection.build_compress_greeting(profile, language="中文")
+        assert "中文" in result
+
+    def test_compress_greeting_no_language(self, tmp_path: Path):
+        profile = _make_profile(key_files=["readme.md"])
+        result = SimpleInjection.build_compress_greeting(profile)
+        assert "Respond in" not in result

@@ -26,3 +26,8 @@ class PromptBuilder:
         self, profile: ProfileConfig, language: str | None = None
     ) -> str:
         return self._injector.build_greeting(profile, language)
+
+    def build_compress_greeting(
+        self, profile: ProfileConfig, language: str | None = None
+    ) -> str:
+        return self._injector.build_compress_greeting(profile, language)

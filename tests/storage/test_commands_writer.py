@@ -31,8 +31,13 @@ class TestWriteCommands:
     def test_ctx_update_has_rules(self, tmp_path: Path) -> None:
         write_commands(tmp_path, "default", "claude")
         content = (tmp_path / ".claude" / "commands" / "ctx-update.md").read_text()
-        assert "never directories" in content
+        assert "outdated" in content
         assert "$ARGUMENTS" in content
+
+    def test_ctx_update_has_pitfalls_path(self, tmp_path: Path) -> None:
+        write_commands(tmp_path, "reviewer", "claude")
+        content = (tmp_path / ".claude" / "commands" / "ctx-update.md").read_text()
+        assert ".ctxforge/profiles/reviewer/pitfalls.md" in content
 
     def test_overwrites_existing(self, tmp_path: Path) -> None:
         write_commands(tmp_path, "old-profile", "claude")

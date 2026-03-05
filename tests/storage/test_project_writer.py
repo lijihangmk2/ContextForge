@@ -1,6 +1,11 @@
 """Tests for project_writer."""
 
-import tomllib
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 from pathlib import Path
 
 from ctxforge.spec.schema import CliConfig, DefaultsConfig, ProjectConfig, ProjectSection

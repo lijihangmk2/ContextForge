@@ -1,9 +1,15 @@
 """ctxforge CLI application."""
 
+from __future__ import annotations
+
+import sys
+
 import typer
+from setproctitle import setproctitle
 
 from ctxforge.__version__ import __version__
 from ctxforge.console.commands.clean import clean_command
+from ctxforge.console.commands.ctx import ctx_app
 from ctxforge.console.commands.init import init_command
 from ctxforge.console.commands.profile import profile_app
 from ctxforge.console.commands.run import run_command
@@ -40,7 +46,9 @@ app.command(name="init")(init_command)
 app.command(name="run")(run_command)
 app.command(name="clean")(clean_command)
 app.add_typer(profile_app, name="profile")
+app.add_typer(ctx_app, name="ctx")
 
 
 def main() -> None:
+    setproctitle("ctxforge")
     app()

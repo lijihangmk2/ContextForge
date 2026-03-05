@@ -37,6 +37,10 @@ ctxforge run
 | `ctxforge profile create NAME` | Create a new profile |
 | `ctxforge profile list` | List all profiles |
 | `ctxforge profile show NAME` | Show profile details |
+| `ctxforge ctx profile [PROFILE]` | Show profile configuration |
+| `ctxforge ctx files [PROFILE]` | List key files with size info |
+| `ctxforge ctx update [PROFILE] [--all]` | AI updates stale key files |
+| `ctxforge ctx compress [PROFILE] [--all]` | AI compresses verbose key files |
 | `ctxforge clean [PATH]` | Remove all ctxforge configuration |
 
 ## Minimal Example
@@ -54,7 +58,7 @@ When using Claude Code as the active CLI, ctxforge generates `/project:ctx-*` sl
 |---------|-------------|
 | `/project:ctx-profile` | View current profile configuration |
 | `/project:ctx-files` | List key files with size info |
-| `/project:ctx-update` | AI suggests key file updates |
+| `/project:ctx-update` | AI updates stale key files based on session changes |
 | `/project:ctx-compress` | AI compresses verbose key files |
 
 These commands are not available for other CLIs (e.g. Codex).

@@ -27,6 +27,10 @@ ctxforge run           # start AI CLI with context
 | `ctxforge run [PROFILE]` | Start AI CLI session with context |
 | `ctxforge profile create NAME` | Create a new profile |
 | `ctxforge profile list` | List all profiles |
+| `ctxforge ctx profile` | Show profile configuration |
+| `ctxforge ctx files` | List key files with size info |
+| `ctxforge ctx update [--all]` | AI updates stale key files |
+| `ctxforge ctx compress [--all]` | AI compresses verbose key files |
 | `ctxforge clean` | Remove all ctxforge configuration |
 
 ## Links

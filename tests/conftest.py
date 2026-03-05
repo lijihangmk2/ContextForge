@@ -4,8 +4,10 @@ import pytest
 from pathlib import Path
 
 from ctxforge.spec.schema import (
+    CURRENT_PROFILE_VERSION,
     CliConfig,
     DefaultsConfig,
+    ProfileCliSection,
     ProfileConfig,
     ProfileSection,
     ProjectConfig,
@@ -26,16 +28,18 @@ def ctxforge_project(tmp_path: Path) -> Path:
     # project.toml
     project_config = ProjectConfig(
         project=ProjectSection(name="test-project"),
-        cli=CliConfig(detected=["claude"], active="claude"),
+        cli=CliConfig(detected=["claude"]),
         defaults=DefaultsConfig(),
     )
     write_project(ctxforge_dir / "project.toml", project_config)
 
     # default profile
     profile_config = ProfileConfig(
+        schema_version=CURRENT_PROFILE_VERSION,
         profile=ProfileSection(name="default", description="Default profile"),
         role=RoleSection(prompt="You are a helpful assistant."),
         key_files=KeyFilesSection(paths=[]),
+        cli=ProfileCliSection(name="claude"),
     )
     profile_dir = ctxforge_dir / "profiles" / "default"
     profile_dir.mkdir(parents=True)
