@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 from setproctitle import setproctitle
 
+from ctxforge.core.injection import SimpleInjection
 from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
@@ -58,6 +59,11 @@ def _print_injection_summary(
             prompt_preview = prompt_preview[:60] + "..."
         console.print(f"  [dim]Role:[/dim] {prompt_preview}")
 
+    record_paths = SimpleInjection.work_record_paths(profile_config)
+    console.print(f"  [dim]Work record:[/dim]")
+    for p in record_paths:
+        console.print(f"    [dim]{p}[/dim]")
+
     paths = profile_config.key_files.paths
     if paths:
         console.print(f"  [dim]Key files ({len(paths)}):[/dim]")
@@ -88,6 +94,14 @@ def _ensure_migrated(
     return profile_config
 
 
+def _ensure_context_files(profile_dir: Path, profile_config: ProfileConfig) -> None:
+    """Ensure work record files exist in the profile directory."""
+    for name in profile_config.work_record.files:
+        path = profile_dir / name
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
+
+
 def launch_session(
     project_root: Path,
     profile_name: str,
@@ -97,6 +111,7 @@ def launch_session(
     project = Project.load(project_root)
     pm = ProfileManager(project.profiles_dir)
     profile_config = _ensure_migrated(pm, profile_name, project)
+    _ensure_context_files(pm.profile_path(profile_name).parent, profile_config)
 
     cli_name = profile_config.cli.name
     if not cli_name:
@@ -116,7 +131,7 @@ def launch_session(
         greeting = builder.build_greeting(profile_config, language)
 
     # ── Sync slash commands for this profile (claude only) ──────────────
-    write_commands(project.root, profile_name, cli_name)
+    write_commands(project.root, profile_name, cli_name, profile_config)
 
     _print_injection_summary(
         profile_name, cli_name, profile_config, system_prompt, language,

@@ -10,9 +10,11 @@ from rich.console import Console
 
 from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
+    DEFAULT_WORK_RECORD,
     ProfileCliSection,
     ProfileConfig,
     ProjectConfig,
+    WorkRecordSection,
 )
 from ctxforge.storage.profile_writer import write_profile
 
@@ -89,8 +91,22 @@ def _migrate_v1_to_v2(
     )
 
 
+def _migrate_v2_to_v3(
+    config: ProfileConfig,
+    project_config: ProjectConfig,
+) -> None:
+    """v2 → v3: add work_record section with default files."""
+    console.print(
+        f"\n[bold]Upgrading profile '{config.profile.name}' "
+        f"(v2 → v3)[/bold]"
+    )
+    console.print("  Adding work record: journal.md, pitfalls.md")
+    config.work_record = WorkRecordSection(files=dict(DEFAULT_WORK_RECORD))
+
+
 _MIGRATIONS: list[tuple[int, MigrateFn]] = [
     (2, _migrate_v1_to_v2),
+    (3, _migrate_v2_to_v3),
 ]
 
 
@@ -145,4 +161,8 @@ def _apply_defaults(
         config.cli = ProfileCliSection(
             name=project_config.cli.active,
             auto_approve=False,
+        )
+    elif target == 3:
+        config.work_record = WorkRecordSection(
+            files=dict(DEFAULT_WORK_RECORD),
         )

@@ -17,18 +17,18 @@ class SimpleInjection:
         """Assemble the full prompt.
 
         Order is determined by profile.injection.order:
-          - "role_first": role prompt → key files → pitfalls → user prompt
-          - "files_first": key files → role prompt → pitfalls → user prompt
+          - "role_first": role → work record → key files → user prompt
+          - "files_first": key files → work record → role → user prompt
         """
         role_part = self._role_section(profile)
+        record_part = self._work_record_section(profile)
         files_part = self._files_section(profile)
-        pitfalls_part = self._pitfalls_section(profile)
         user_part = user_prompt.strip()
 
         if profile.injection.order == "files_first":
-            parts = [files_part, role_part, pitfalls_part, user_part]
+            parts = [files_part, record_part, role_part, user_part]
         else:
-            parts = [role_part, files_part, pitfalls_part, user_part]
+            parts = [role_part, record_part, files_part, user_part]
 
         return "\n\n".join(p for p in parts if p)
 
@@ -38,18 +38,18 @@ class SimpleInjection:
         """Build a system prompt (no user prompt) for interactive mode.
 
         Sections are ordered according to ``profile.injection.order``:
-          - "role_first": role → key files → pitfalls → language
-          - "files_first": key files → role → pitfalls → language
+          - "role_first": role → work record → key files → language
+          - "files_first": key files → work record → role → language
         """
         role_part = self._role_section(profile)
+        record_part = self._work_record_section(profile)
         files_part = self._files_section(profile)
-        pitfalls_part = self._pitfalls_section(profile)
         lang_part = self._language_section(language)
 
         if profile.injection.order == "files_first":
-            parts = [files_part, role_part, pitfalls_part, lang_part]
+            parts = [files_part, record_part, role_part, lang_part]
         else:
-            parts = [role_part, files_part, pitfalls_part, lang_part]
+            parts = [role_part, record_part, files_part, lang_part]
 
         return "\n\n".join(p for p in parts if p)
 
@@ -59,17 +59,26 @@ class SimpleInjection:
             return ""
         return f"[Role: {profile.profile.name}]\n{prompt}"
 
-    def _pitfalls_section(self, profile: ProfileConfig) -> str:
-        path = (
-            self._root / ".ctxforge" / "profiles"
-            / profile.profile.name / "pitfalls.md"
+    def _work_record_section(self, profile: ProfileConfig) -> str:
+        if not profile.work_record.files:
+            return ""
+        profile_dir = (
+            Path(".ctxforge") / "profiles" / profile.profile.name
         )
-        if not path.is_file():
+        entries: list[str] = []
+        for filename, desc in profile.work_record.files.items():
+            rel = profile_dir / filename
+            full = self._root / rel
+            if full.is_file():
+                entries.append(f"- {rel}  ({desc})")
+        if not entries:
             return ""
-        content = path.read_text(encoding="utf-8").strip()
-        if not content:
-            return ""
-        return f"[Pitfalls]\n{content}"
+        header = (
+            "[Work Record]\n"
+            "IMPORTANT: Read these files first. They contain the AI's working "
+            "memory for this profile and take priority over key files:"
+        )
+        return header + "\n" + "\n".join(entries)
 
     def _files_section(self, profile: ProfileConfig) -> str:
         if not profile.key_files.paths:
@@ -114,6 +123,12 @@ class SimpleInjection:
             f"and are ready.{lang_hint}"
         )
         return " ".join(parts)
+
+    @staticmethod
+    def work_record_paths(profile: ProfileConfig) -> list[str]:
+        """Return relative paths for the profile's work record files."""
+        profile_dir = Path(".ctxforge") / "profiles" / profile.profile.name
+        return [str(profile_dir / f) for f in profile.work_record.files]
 
     @staticmethod
     def build_compress_greeting(

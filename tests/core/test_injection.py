@@ -9,6 +9,7 @@ from ctxforge.spec.schema import (
     ProfileConfig,
     ProfileSection,
     RoleSection,
+    WorkRecordSection,
 )
 
 
@@ -78,50 +79,57 @@ class TestSimpleInjection:
         assert "[Key Files]" not in result
 
 
-class TestPitfallsSection:
-    def test_pitfalls_section_no_file(self, tmp_path: Path):
+class TestWorkRecordSection:
+    def test_no_files(self, tmp_path: Path):
         inj = SimpleInjection(tmp_path)
         profile = _make_profile(role_prompt="Be helpful.")
-        result = inj._pitfalls_section(profile)
+        result = inj._work_record_section(profile)
         assert result == ""
 
-    def test_pitfalls_section_with_file(self, tmp_path: Path):
-        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
-        pitfalls_dir.mkdir(parents=True)
-        (pitfalls_dir / "pitfalls.md").write_text("- Watch out for X\n")
+    def test_with_files(self, tmp_path: Path):
+        profile_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "journal.md").write_text("## TODO\n- fix bug")
+        (profile_dir / "pitfalls.md").write_text("- Watch out for X\n")
         inj = SimpleInjection(tmp_path)
         profile = _make_profile()
-        result = inj._pitfalls_section(profile)
-        assert result == "[Pitfalls]\n- Watch out for X"
+        result = inj._work_record_section(profile)
+        assert "[Work Record]" in result
+        assert "journal.md" in result
+        assert "pitfalls.md" in result
 
-    def test_pitfalls_section_empty_file(self, tmp_path: Path):
-        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
-        pitfalls_dir.mkdir(parents=True)
-        (pitfalls_dir / "pitfalls.md").write_text("   \n  ")
+    def test_empty_files_still_listed(self, tmp_path: Path):
+        """Empty files exist on disk — still referenced so AI can write to them."""
+        profile_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "journal.md").write_text("")
+        (profile_dir / "pitfalls.md").write_text("")
         inj = SimpleInjection(tmp_path)
         profile = _make_profile()
-        result = inj._pitfalls_section(profile)
-        assert result == ""
+        result = inj._work_record_section(profile)
+        assert "[Work Record]" in result
+        assert "journal.md" in result
+        assert "pitfalls.md" in result
 
-    def test_build_includes_pitfalls(self, tmp_path: Path):
-        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
-        pitfalls_dir.mkdir(parents=True)
-        (pitfalls_dir / "pitfalls.md").write_text("- Pitfall A\n")
+    def test_build_includes_work_record(self, tmp_path: Path):
+        profile_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "journal.md").write_text("## TODO\n- task")
+        (profile_dir / "pitfalls.md").write_text("- gotcha")
         inj = SimpleInjection(tmp_path)
         profile = _make_profile(role_prompt="Be helpful.")
         result = inj.build(profile, "do stuff")
-        assert "[Pitfalls]" in result
-        assert "- Pitfall A" in result
+        assert "[Work Record]" in result
 
-    def test_build_system_includes_pitfalls(self, tmp_path: Path):
-        pitfalls_dir = tmp_path / ".ctxforge" / "profiles" / "test"
-        pitfalls_dir.mkdir(parents=True)
-        (pitfalls_dir / "pitfalls.md").write_text("- Pitfall B\n")
+    def test_build_system_includes_work_record(self, tmp_path: Path):
+        profile_dir = tmp_path / ".ctxforge" / "profiles" / "test"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "pitfalls.md").write_text("- Pitfall B\n")
         inj = SimpleInjection(tmp_path)
         profile = _make_profile(role_prompt="Be helpful.")
         result = inj.build_system(profile)
-        assert "[Pitfalls]" in result
-        assert "- Pitfall B" in result
+        assert "[Work Record]" in result
+        assert "pitfalls.md" in result
 
 
 class TestBuildSystem:

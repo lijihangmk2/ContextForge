@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 # ─── Schema versioning ─────────────────────────────────────────────────────
 
-CURRENT_PROFILE_VERSION = 2
+CURRENT_PROFILE_VERSION = 3
 CURRENT_PROJECT_VERSION = 1  # project.toml has not changed yet
 
 # ─── project.toml models ────────────────────────────────────────────────────
@@ -65,6 +65,16 @@ class ProfileCliSection(BaseModel):
     auto_approve: bool = False  # skip permission prompts
 
 
+DEFAULT_WORK_RECORD: dict[str, str] = {
+    "journal.md": "work journal — completed tasks, in-progress, TODOs",
+    "pitfalls.md": "pitfalls — gotchas, lessons learned, warnings",
+}
+
+
+class WorkRecordSection(BaseModel):
+    files: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_WORK_RECORD))
+
+
 class EnhancersSection(BaseModel):
     enabled: list[str] = Field(default_factory=list)
 
@@ -73,6 +83,7 @@ class ProfileConfig(BaseModel):
     schema_version: int = 1
     profile: ProfileSection
     role: RoleSection = Field(default_factory=RoleSection)
+    work_record: WorkRecordSection = Field(default_factory=WorkRecordSection)
     key_files: KeyFilesSection = Field(default_factory=KeyFilesSection)
     injection: InjectionSection = Field(default_factory=InjectionSection)
     cli: ProfileCliSection = Field(default_factory=ProfileCliSection)

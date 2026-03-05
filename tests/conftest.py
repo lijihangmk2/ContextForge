@@ -7,13 +7,13 @@ from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
     CliConfig,
     DefaultsConfig,
+    KeyFilesSection,
     ProfileCliSection,
     ProfileConfig,
     ProfileSection,
     ProjectConfig,
     ProjectSection,
     RoleSection,
-    KeyFilesSection,
 )
 from ctxforge.storage.project_writer import write_project
 from ctxforge.storage.profile_writer import write_profile

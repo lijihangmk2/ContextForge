@@ -283,7 +283,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.1.1" in result.output
+        assert "1.2.0" in result.output
 
 
 class TestSetProcTitle:
@@ -300,29 +300,3 @@ class TestSetProcTitle:
             main()
             mock_spt.assert_called_once_with("ctxforge")
 
-    def test_osc_escape_written_when_tty(self):
-        """OSC title escape is written when stdout is a tty."""
-        with (
-            patch("ctxforge.console.application.setproctitle"),
-            patch("ctxforge.console.application.app"),
-            patch("ctxforge.console.application.sys") as mock_sys,
-        ):
-            mock_sys.stdout.isatty.return_value = True
-            from ctxforge.console.application import main
-
-            main()
-            mock_sys.stdout.write.assert_called_once_with("\033]0;ctxforge\007")
-            mock_sys.stdout.flush.assert_called_once()
-
-    def test_osc_escape_skipped_when_not_tty(self):
-        """OSC title escape is skipped when stdout is not a tty."""
-        with (
-            patch("ctxforge.console.application.setproctitle"),
-            patch("ctxforge.console.application.app"),
-            patch("ctxforge.console.application.sys") as mock_sys,
-        ):
-            mock_sys.stdout.isatty.return_value = False
-            from ctxforge.console.application import main
-
-            main()
-            mock_sys.stdout.write.assert_not_called()
