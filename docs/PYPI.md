@@ -31,6 +31,14 @@ ctxforge run           # start AI CLI with context
 | `ctxforge ctx files` | List key files with size info |
 | `ctxforge ctx update [--all]` | AI updates stale key files |
 | `ctxforge ctx compress [--all]` | AI compresses verbose key files |
+| `ctxforge tool add NAME` | Register an MCP tool (from registry, GitHub URL, or manually) |
+| `ctxforge tool search KEYWORD` | Search the MCP registry |
+| `ctxforge tool setup NAME` | Launch AI CLI to install/configure a tool |
+| `ctxforge tool list` | List registered tools and status |
+| `ctxforge tool check` | Check tool availability |
+| `ctxforge tool disable NAME` | Disable a tool for a profile |
+| `ctxforge tool enable NAME` | Re-enable a disabled tool |
+| `ctxforge tool remove NAME` | Remove a tool from the project |
 | `ctxforge clean` | Remove all ctxforge configuration |
 
 ## Links

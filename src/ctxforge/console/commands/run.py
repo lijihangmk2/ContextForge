@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 import typer
@@ -14,6 +15,7 @@ from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
 from ctxforge.core.prompt_builder import PromptBuilder
+from ctxforge.core.toolchain import ToolStatus, build_mcp_config, resolve_tools
 from ctxforge.exceptions import CForgeError, ProfileNotFoundError, ProjectNotFoundError
 from ctxforge.runner.registry import get_runner
 from ctxforge.spec.schema import ProfileConfig
@@ -48,6 +50,7 @@ def _print_injection_summary(
     profile_config: ProfileConfig,
     system_prompt: str,
     language: str | None,
+    tool_summary: list[tuple[str, str]] | None = None,
 ) -> None:
     """Print a summary of what is being injected."""
     console.print(f"[bold]ctxforge[/bold] profile=[cyan]{profile_name}[/cyan]"
@@ -60,7 +63,7 @@ def _print_injection_summary(
         console.print(f"  [dim]Role:[/dim] {prompt_preview}")
 
     record_paths = SimpleInjection.work_record_paths(profile_config)
-    console.print(f"  [dim]Work record:[/dim]")
+    console.print("  [dim]Work record:[/dim]")
     for p in record_paths:
         console.print(f"    [dim]{p}[/dim]")
 
@@ -69,6 +72,15 @@ def _print_injection_summary(
         console.print(f"  [dim]Key files ({len(paths)}):[/dim]")
         for p in paths:
             console.print(f"    [dim]{p}[/dim]")
+
+    if tool_summary:
+        parts = []
+        for tname, tstatus in tool_summary:
+            if tstatus == "ok":
+                parts.append(f"[green]{tname} ✓[/green]")
+            else:
+                parts.append(f"[yellow]{tname} ✗[/yellow] ({tstatus})")
+        console.print(f"  [dim]Tools:[/dim] {', '.join(parts)}")
 
     if language:
         console.print(f"  [dim]Language:[/dim] {language}")
@@ -102,6 +114,41 @@ def _ensure_context_files(profile_dir: Path, profile_config: ProfileConfig) -> N
             path.write_text("", encoding="utf-8")
 
 
+SESSION_FILE = ".session"
+
+
+def _load_session_id(profile_dir: Path) -> str | None:
+    """Read the saved session ID for a profile, or None."""
+    session_file = profile_dir / SESSION_FILE
+    if session_file.exists():
+        sid = session_file.read_text(encoding="utf-8").strip()
+        return sid if sid else None
+    return None
+
+
+def _save_session_id(profile_dir: Path, session_id: str) -> None:
+    """Persist a session ID to the profile directory."""
+    session_file = profile_dir / SESSION_FILE
+    session_file.write_text(session_id, encoding="utf-8")
+
+
+def _ask_resume_or_new() -> bool:
+    """Ask user whether to resume previous session. Returns True to resume."""
+    if not sys.stdin.isatty():
+        return True
+    console.print(
+        "[bold]Previous session found.[/bold] "
+        "Continue or start new? \\[C/n]: ",
+        end="",
+    )
+    value = sys.stdin.readline().strip().lower()
+    if not value or value in ("c", "continue", "y", "yes"):
+        return True
+    return False
+
+
+
+
 def launch_session(
     project_root: Path,
     profile_name: str,
@@ -121,6 +168,23 @@ def launch_session(
         console.print("[red]Error:[/red] No CLI configured for this profile.")
         return 1
 
+    profile_dir = pm.profile_path(profile_name).parent
+
+    # ── Session management ─────────────────────────────────────────────
+    resume_id: str | None = None
+    session_id: str | None = None
+    saved_sid = _load_session_id(profile_dir)
+    if saved_sid and not compress:
+        if _ask_resume_or_new():
+            resume_id = saved_sid
+            console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
+        else:
+            session_id = str(uuid.uuid4())
+            _save_session_id(profile_dir, session_id)
+    else:
+        session_id = str(uuid.uuid4())
+        _save_session_id(profile_dir, session_id)
+
     builder = PromptBuilder(project.root)
     language = project.config.defaults.language
     system_prompt = builder.build_system(profile_config, language)
@@ -130,12 +194,42 @@ def launch_session(
     else:
         greeting = builder.build_greeting(profile_config, language)
 
+    # ── Resolve tools ──────────────────────────────────────────────────
+    tool_summary: list[tuple[str, str]] | None = None
+    mcp_config_path = None
+    if project.config.tools:
+        results = resolve_tools(profile_config, project.config)
+        tool_summary = []
+        available_tools: list[tuple[str, str]] = []  # (name, description)
+        for r in results:
+            tool_def = project.config.tools[r.name]
+            if r.ok:
+                tool_summary.append((r.name, "ok"))
+                available_tools.append((r.name, tool_def.description))
+            elif r.status == ToolStatus.MISSING_COMMAND:
+                tool_summary.append((r.name, "missing command"))
+            else:
+                tool_summary.append((r.name, f"missing {', '.join(r.missing_env)}"))
+
+        # Inject tool descriptions into system prompt
+        if available_tools:
+            lines = ["[Available MCP Tools]",
+                     "The following MCP tools are connected and ready to use:"]
+            for tname, tdesc in available_tools:
+                desc_part = f" — {tdesc}" if tdesc else ""
+                lines.append(f"- {tname}{desc_part}")
+            system_prompt += "\n\n" + "\n".join(lines)
+
+        mcp_config_path = build_mcp_config(profile_config, project.config)
+
     # ── Sync slash commands for this profile (claude only) ──────────────
     write_commands(project.root, profile_name, cli_name, profile_config)
 
-    _print_injection_summary(
-        profile_name, cli_name, profile_config, system_prompt, language,
-    )
+    if not resume_id:
+        _print_injection_summary(
+            profile_name, cli_name, profile_config, system_prompt, language,
+            tool_summary=tool_summary,
+        )
 
     # Set terminal title to show the active profile
     setproctitle(profile_name)
@@ -153,7 +247,11 @@ def launch_session(
 
     try:
         result = runner.run(
-            system_prompt, greeting, auto_approve=auto_approve,
+            system_prompt, greeting,
+            auto_approve=auto_approve,
+            mcp_config=mcp_config_path,
+            session_id=session_id,
+            resume_id=resume_id,
         )
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")

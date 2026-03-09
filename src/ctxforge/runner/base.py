@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 
@@ -30,10 +31,19 @@ class CliRunner(Protocol):
         initial_prompt: str = "",
         *,
         auto_approve: bool = False,
+        mcp_config: Path | None = None,
+        session_id: str | None = None,
+        resume_id: str | None = None,
     ) -> RunResult:
         """Execute the AI CLI with the given system prompt."""
         ...
 
-    def run_oneshot(self, prompt: str, *, auto_approve: bool = False) -> RunResult:
+    def run_oneshot(
+        self,
+        prompt: str,
+        *,
+        auto_approve: bool = False,
+        mcp_config: Path | None = None,
+    ) -> RunResult:
         """Run a single non-interactive prompt."""
         ...

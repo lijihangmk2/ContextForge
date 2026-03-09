@@ -13,6 +13,7 @@ from ctxforge.console.commands.ctx import ctx_app
 from ctxforge.console.commands.init import init_command
 from ctxforge.console.commands.profile import profile_app
 from ctxforge.console.commands.run import run_command
+from ctxforge.console.commands.tool import tool_app
 
 app = typer.Typer(
     name="ctxforge",
@@ -47,6 +48,7 @@ app.command(name="run")(run_command)
 app.command(name="clean")(clean_command)
 app.add_typer(profile_app, name="profile")
 app.add_typer(ctx_app, name="ctx")
+app.add_typer(tool_app, name="tool")
 
 
 def main() -> None:

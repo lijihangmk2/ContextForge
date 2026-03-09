@@ -100,10 +100,11 @@ class TestCtxUpdate:
             result = runner.invoke(app, ["ctx", "update"])
         assert result.exit_code == 0, result.output
         assert "Updating" in result.output
-        # Verify claude -p was called
+        # Verify claude -p was called with session isolation
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "claude"
-        assert call_args[1] == "-p"
+        assert "--no-session-persistence" in call_args
+        assert "-p" in call_args
 
     def test_update_explicit_profile(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
@@ -132,7 +133,8 @@ class TestCtxCompress:
         assert "Compressing" in result.output
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "claude"
-        assert call_args[1] == "-p"
+        assert "--no-session-persistence" in call_args
+        assert "-p" in call_args
 
     def test_compress_explicit_profile(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)

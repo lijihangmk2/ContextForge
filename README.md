@@ -43,6 +43,53 @@ ctxforge run
 | `ctxforge ctx compress [PROFILE] [--all]` | AI compresses verbose key files |
 | `ctxforge clean [PATH]` | Remove all ctxforge configuration |
 
+## MCP Tool Management
+
+ctxforge can manage MCP (Model Context Protocol) tools for your AI sessions. Registered tools are automatically available to all profiles.
+
+```bash
+# Search the MCP registry
+ctxforge tool search puppeteer
+
+# Add a tool (auto-fetches config from the MCP registry, launches setup if needed)
+ctxforge tool add puppeteer
+
+# Add from a GitHub URL (fetches server.json)
+ctxforge tool add https://github.com/anthropics/mcp-server-example
+
+# Add manually
+ctxforge tool add my-tool --command npx --args "-y,my-mcp-server"
+
+# Re-run setup for a tool
+ctxforge tool setup puppeteer
+
+# List registered tools and status
+ctxforge tool list
+
+# Check tool availability
+ctxforge tool check
+
+# Disable a tool for a specific profile
+ctxforge tool disable puppeteer --profile reviewer
+
+# Re-enable
+ctxforge tool enable puppeteer --profile reviewer
+
+# Remove a tool entirely
+ctxforge tool remove puppeteer
+```
+
+| Command | Description |
+|---------|-------------|
+| `ctxforge tool search KEYWORD` | Search the MCP registry |
+| `ctxforge tool add NAME` | Register a tool (from registry, GitHub URL, or manually) |
+| `ctxforge tool setup NAME` | Launch AI CLI to install/configure a tool |
+| `ctxforge tool list` | List registered tools and availability |
+| `ctxforge tool check [NAME]` | Check tool availability |
+| `ctxforge tool enable NAME [-p PROFILE]` | Re-enable a disabled tool for a profile |
+| `ctxforge tool disable NAME [-p PROFILE]` | Disable a tool for a specific profile |
+| `ctxforge tool remove NAME` | Remove a tool from the project |
+
 ## Minimal Example
 
 ```bash

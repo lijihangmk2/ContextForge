@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 # ─── Schema versioning ─────────────────────────────────────────────────────
 
-CURRENT_PROFILE_VERSION = 3
-CURRENT_PROJECT_VERSION = 1  # project.toml has not changed yet
+CURRENT_PROFILE_VERSION = 5
+CURRENT_PROJECT_VERSION = 2
 
 # ─── project.toml models ────────────────────────────────────────────────────
 
@@ -27,11 +27,20 @@ class DefaultsConfig(BaseModel):
     model: str | None = None  # LLM model for project analysis, e.g. "gpt-4o-mini"
 
 
+class ToolDefinition(BaseModel):
+    description: str = ""
+    command: str
+    args: list[str] = Field(default_factory=list)
+    env: list[str] = Field(default_factory=list)
+    setup: str = ""
+
+
 class ProjectConfig(BaseModel):
     schema_version: int = 1
     project: ProjectSection = Field(default_factory=ProjectSection)
     cli: CliConfig = Field(default_factory=CliConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+    tools: dict[str, ToolDefinition] = Field(default_factory=dict)
 
 
 # ─── profile.toml models ────────────────────────────────────────────────────
@@ -79,6 +88,10 @@ class EnhancersSection(BaseModel):
     enabled: list[str] = Field(default_factory=list)
 
 
+class ToolsSection(BaseModel):
+    disabled: list[str] = Field(default_factory=list)
+
+
 class ProfileConfig(BaseModel):
     schema_version: int = 1
     profile: ProfileSection
@@ -89,3 +102,4 @@ class ProfileConfig(BaseModel):
     cli: ProfileCliSection = Field(default_factory=ProfileCliSection)
     budget: BudgetSection = Field(default_factory=BudgetSection)
     enhancers: EnhancersSection = Field(default_factory=EnhancersSection)
+    tools: ToolsSection = Field(default_factory=ToolsSection)

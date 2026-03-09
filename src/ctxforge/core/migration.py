@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from rich.console import Console
 
 from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
+    CURRENT_PROJECT_VERSION,
     DEFAULT_WORK_RECORD,
     ProfileCliSection,
     ProfileConfig,
     ProjectConfig,
+    ToolsSection,
     WorkRecordSection,
 )
 from ctxforge.storage.profile_writer import write_profile
+from ctxforge.storage.project_writer import write_project
 
 console = Console()
 
@@ -104,9 +107,47 @@ def _migrate_v2_to_v3(
     config.work_record = WorkRecordSection(files=dict(DEFAULT_WORK_RECORD))
 
 
+def _migrate_v3_to_v4(
+    config: ProfileConfig,
+    project_config: ProjectConfig,
+) -> None:
+    """v3 → v4: add tools section."""
+    console.print(
+        f"\n[bold]Upgrading profile '{config.profile.name}' "
+        f"(v3 → v4)[/bold]"
+    )
+    console.print("  Adding tools section (empty)")
+    config.tools = ToolsSection()
+
+
+def _migrate_v4_to_v5(
+    config: ProfileConfig,
+    project_config: ProjectConfig,
+) -> None:
+    """v4 → v5: tools.enabled → tools.disabled (all tools active by default)."""
+    console.print(
+        f"\n[bold]Upgrading profile '{config.profile.name}' "
+        f"(v4 → v5)[/bold]"
+    )
+    # Previously enabled tools become the default (all active),
+    # so disabled = all project tools MINUS the old enabled list.
+    old_enabled = getattr(config.tools, "enabled", None) or []
+    if old_enabled and project_config.tools:
+        disabled = [t for t in project_config.tools if t not in old_enabled]
+    else:
+        disabled = []
+    config.tools = ToolsSection(disabled=disabled)
+    if disabled:
+        console.print(f"  Disabled tools: {', '.join(disabled)}")
+    else:
+        console.print("  All project tools active by default")
+
+
 _MIGRATIONS: list[tuple[int, MigrateFn]] = [
     (2, _migrate_v1_to_v2),
     (3, _migrate_v2_to_v3),
+    (4, _migrate_v3_to_v4),
+    (5, _migrate_v4_to_v5),
 ]
 
 
@@ -166,3 +207,36 @@ def _apply_defaults(
         config.work_record = WorkRecordSection(
             files=dict(DEFAULT_WORK_RECORD),
         )
+    elif target == 4:
+        config.tools = ToolsSection()
+    elif target == 5:
+        config.tools = ToolsSection()
+
+
+# ── Project migration ───────────────────────────────────────────────────────
+
+
+def needs_project_migration(config: ProjectConfig) -> bool:
+    """Check if a project config needs migration."""
+    return config.schema_version < CURRENT_PROJECT_VERSION
+
+
+def migrate_project(
+    config: ProjectConfig,
+    project_path: Path,
+) -> ProjectConfig:
+    """Run project migrations and write back to disk."""
+    if config.schema_version >= CURRENT_PROJECT_VERSION:
+        return config
+
+    if config.schema_version < 2:
+        config.tools = {}
+        config.schema_version = 2
+        write_project(project_path, config)
+        if sys.stdin.isatty():
+            console.print(
+                "  [green]Upgraded project.toml (v1 → v2): "
+                "added tools registry[/green]\n"
+            )
+
+    return config

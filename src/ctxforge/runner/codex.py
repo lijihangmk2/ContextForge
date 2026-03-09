@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult
@@ -20,6 +21,9 @@ class CodexRunner:
     def run(
         self, system_prompt: str, initial_prompt: str = "",
         *, auto_approve: bool = False,
+        mcp_config: Path | None = None,
+        session_id: str | None = None,
+        resume_id: str | None = None,
     ) -> RunResult:
         """Start an interactive ``codex`` session.
 
@@ -43,7 +47,10 @@ class CodexRunner:
 
         return RunResult(exit_code=proc.returncode, stdout="", stderr="")
 
-    def run_oneshot(self, prompt: str, *, auto_approve: bool = False) -> RunResult:
+    def run_oneshot(
+        self, prompt: str, *, auto_approve: bool = False,
+        mcp_config: Path | None = None,
+    ) -> RunResult:
         """Run a single non-interactive ``codex`` command."""
         cmd: list[str] = ["codex"]
         if auto_approve:
