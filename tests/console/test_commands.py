@@ -283,7 +283,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.2.0" in result.output
+        assert "1.4.0" in result.output
 
 
 class TestSetProcTitle:
@@ -292,9 +292,7 @@ class TestSetProcTitle:
         with (
             patch("ctxforge.console.application.setproctitle") as mock_spt,
             patch("ctxforge.console.application.app"),
-            patch("ctxforge.console.application.sys") as mock_sys,
         ):
-            mock_sys.stdout.isatty.return_value = False
             from ctxforge.console.application import main
 
             main()

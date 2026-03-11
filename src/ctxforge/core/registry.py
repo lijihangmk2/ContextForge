@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -67,13 +68,14 @@ def _parse_server_json(data: dict[str, object]) -> RegistryPackage | None:
     packages = data.get("packages", [])
     if not isinstance(packages, list):
         return None
-    pkg = _pick_package(packages)  # type: ignore[arg-type]
+    pkg = _pick_package(packages)
     if pkg is None:
         return None
 
     env_vars: list[str] = []
     env_descs: dict[str, str] = {}
-    for ev in pkg.get("environmentVariables", []):  # type: ignore[union-attr]
+    raw_envs = pkg.get("environmentVariables", [])
+    for ev in raw_envs if isinstance(raw_envs, list) else []:
         if isinstance(ev, dict):
             name = ev.get("name", "")
             if name:
@@ -135,7 +137,7 @@ def fetch_from_github(url: str) -> RegistryPackage:
 
 def search(query: str, *, limit: int = 10) -> list[RegistryPackage]:
     """Search the MCP registry for servers matching *query*."""
-    url = f"{_BASE_URL}/servers?search={urllib.request.quote(query)}&limit={limit}"
+    url = f"{_BASE_URL}/servers?search={urllib.parse.quote(query)}&limit={limit}"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
@@ -154,8 +156,9 @@ def search(query: str, *, limit: int = 10) -> list[RegistryPackage]:
 
         env_vars: list[str] = []
         env_descs: dict[str, str] = {}
-        for ev in pkg.get("environmentVariables", []):
-            name = ev.get("name", "")
+        raw_envs = pkg.get("environmentVariables", [])
+        for ev in raw_envs if isinstance(raw_envs, list) else []:
+            name = ev.get("name", "") if isinstance(ev, dict) else ""
             if name:
                 env_vars.append(name)
                 desc = ev.get("description", "")
@@ -164,11 +167,11 @@ def search(query: str, *, limit: int = 10) -> list[RegistryPackage]:
 
         results.append(
             RegistryPackage(
-                name=server.get("name", ""),
-                description=server.get("description", ""),
-                registry_type=pkg.get("registryType", ""),
-                identifier=pkg.get("identifier", ""),
-                version=pkg.get("version", ""),
+                name=str(server.get("name", "")),
+                description=str(server.get("description", "")),
+                registry_type=str(pkg.get("registryType", "")),
+                identifier=str(pkg.get("identifier", "")),
+                version=str(pkg.get("version", "")),
                 env_vars=env_vars,
                 env_descriptions=env_descs,
             )
@@ -178,11 +181,11 @@ def search(query: str, *, limit: int = 10) -> list[RegistryPackage]:
 
 def _pick_package(packages: list[dict[str, object]]) -> dict[str, object] | None:
     """Pick the best package entry — prefer npm stdio."""
-    stdio_pkgs = [
-        p for p in packages
-        if isinstance(p.get("transport"), dict)
-        and p["transport"].get("type") == "stdio"  # type: ignore[union-attr]
-    ]
+    stdio_pkgs: list[dict[str, object]] = []
+    for p in packages:
+        transport = p.get("transport")
+        if isinstance(transport, dict) and transport.get("type") == "stdio":
+            stdio_pkgs.append(p)
     if not stdio_pkgs:
         return packages[0] if packages else None
     # Prefer npm

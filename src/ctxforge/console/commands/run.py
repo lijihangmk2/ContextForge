@@ -32,7 +32,7 @@ def _choose_profile(names: list[str]) -> str:
         result = questionary.select("Select profile:", choices=names).ask()
         if result is None:
             raise typer.Exit(0)
-        return result
+        return str(result)
     # Fallback for piped input (tests, CI)
     console.print("Select profile:")
     for i, name in enumerate(names, 1):

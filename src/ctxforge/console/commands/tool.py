@@ -295,9 +295,9 @@ def add_command(
 
     # --- Registry search mode (default) ---
     if not manual and not command:
-        pkg = _search_registry(name)
-        if pkg is not None:
-            return _register_from_package(project, pkg)
+        found = _search_registry(name)
+        if found is not None:
+            return _register_from_package(project, found)
 
         # Registry returned nothing — fall through to manual
         console.print("  Falling back to manual mode.")

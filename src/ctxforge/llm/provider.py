@@ -125,13 +125,13 @@ def _call_anthropic(model: str, system_prompt: str, user_prompt: str) -> str:
 
 def _call_google(model: str, system_prompt: str, user_prompt: str) -> str:
     try:
-        import google.generativeai as genai  # type: ignore[import-not-found]
+        import google.generativeai as genai
     except ImportError:
         raise SDKNotInstalledError(
             "google-generativeai is not installed. Install it with: pip install ctxforge[google]"
         )
 
-    gen_model = genai.GenerativeModel(model, system_instruction=system_prompt)
+    gen_model = genai.GenerativeModel(model, system_instruction=system_prompt)  # type: ignore[attr-defined]
     response = gen_model.generate_content(user_prompt)
     return response.text or ""
 

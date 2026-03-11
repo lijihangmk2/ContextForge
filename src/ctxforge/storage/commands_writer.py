@@ -137,7 +137,7 @@ Create any that don't exist.
 For **journal** files:
 - Completed tasks: one-liner each, just the outcome — no details or rationale
 - In-progress tasks: brief status note
-- TODOs: be specific — include what needs to be done and why, so future sessions can act on them without extra context
+- TODOs: be specific — include what to do and why, so future sessions can act without extra context
 - Remove tasks that are no longer relevant
 - Structure: use headings like `## Completed`, `## In Progress`, `## TODO`
 
