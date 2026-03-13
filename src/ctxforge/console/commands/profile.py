@@ -70,6 +70,37 @@ def create_command(
     console.print(f"[green]Created profile '{name}'.[/green]")
 
 
+@profile_app.command("edit")
+def edit_command(
+    name: str = typer.Argument(..., help="Profile name to edit."),
+    new_name: str | None = typer.Option(None, "--name", "-n", help="New profile name."),
+    description: str | None = typer.Option(None, "--desc", "-d", help="New description."),
+    role_prompt: str | None = typer.Option(None, "--prompt", "-p", help="New role prompt."),
+) -> None:
+    """Edit a profile's name, description, or role prompt."""
+    try:
+        _project, pm = _get_manager()
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if new_name is None and description is None and role_prompt is None:
+        console.print("[yellow]Nothing to change. Use --name, --desc, or --prompt.[/yellow]")
+        raise typer.Exit(1)
+
+    try:
+        config = pm.edit(name, new_name=new_name, description=description, role_prompt=role_prompt)
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    display_name = config.profile.name
+    if new_name and new_name != name:
+        console.print(f"[green]Renamed profile '{name}' → '{display_name}'.[/green]")
+    else:
+        console.print(f"[green]Updated profile '{display_name}'.[/green]")
+
+
 @profile_app.command("show")
 def show_command(
     name: str = typer.Argument(..., help="Profile name."),

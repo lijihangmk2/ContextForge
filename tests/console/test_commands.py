@@ -234,6 +234,30 @@ class TestProfileCommands:
             ctxforge_project / ".ctxforge" / "profiles" / "reviewer" / "profile.toml"
         ).exists()
 
+    def test_profile_edit_desc(self, ctxforge_project: Path, monkeypatch):
+        monkeypatch.chdir(ctxforge_project)
+        result = runner.invoke(
+            app, ["profile", "edit", "default", "--desc", "Updated desc"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Updated profile 'default'" in result.output
+
+    def test_profile_edit_rename(self, ctxforge_project: Path, monkeypatch):
+        monkeypatch.chdir(ctxforge_project)
+        result = runner.invoke(
+            app, ["profile", "edit", "default", "--name", "main"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Renamed profile 'default' → 'main'" in result.output
+        assert (
+            ctxforge_project / ".ctxforge" / "profiles" / "main" / "profile.toml"
+        ).exists()
+
+    def test_profile_edit_no_args(self, ctxforge_project: Path, monkeypatch):
+        monkeypatch.chdir(ctxforge_project)
+        result = runner.invoke(app, ["profile", "edit", "default"])
+        assert result.exit_code == 1
+
     def test_profile_create_duplicate(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
         result = runner.invoke(app, ["profile", "create", "default"])

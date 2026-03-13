@@ -84,6 +84,57 @@ class ProfileManager:
         write_profile(profile_path, config)
         return config
 
+    def edit(
+        self,
+        name: str,
+        *,
+        new_name: str | None = None,
+        description: str | None = None,
+        role_prompt: str | None = None,
+    ) -> ProfileConfig:
+        """Edit an existing profile's metadata.
+
+        Args:
+            name: Current profile name.
+            new_name: Rename the profile (directory + config).
+            description: New description (empty string to clear).
+            role_prompt: New role prompt (empty string to clear).
+
+        Returns:
+            The updated ProfileConfig.
+
+        Raises:
+            ProfileNotFoundError: If the profile doesn't exist.
+            CForgeError: If the new name conflicts with an existing profile.
+        """
+        from ctxforge.exceptions import CForgeError
+
+        if not self.exists(name):
+            raise ProfileNotFoundError(f"Profile '{name}' not found")
+
+        if new_name and new_name != name and self.exists(new_name):
+            raise CForgeError(f"Profile '{new_name}' already exists")
+
+        config = self.load(name)
+
+        if description is not None:
+            config.profile.description = description
+        if role_prompt is not None:
+            config.role.prompt = role_prompt
+
+        target_name = new_name if new_name else name
+        config.profile.name = target_name
+
+        if new_name and new_name != name:
+            old_dir = self._dir / name
+            new_dir = self._dir / new_name
+            old_dir.rename(new_dir)
+            write_profile(new_dir / "profile.toml", config)
+        else:
+            write_profile(self._dir / name / "profile.toml", config)
+
+        return config
+
     def resolve(self, name: str | None) -> str:
         """Resolve a profile name: explicit > single-profile auto > error.
 

@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 
 from ctxforge.core.profile import ProfileManager
-from ctxforge.exceptions import ProfileNotFoundError
+from ctxforge.exceptions import CForgeError, ProfileNotFoundError
 
 
 class TestProfileManager:
@@ -75,3 +75,37 @@ class TestProfileManager:
         pm = ProfileManager(tmp_path / "profiles")
         with pytest.raises(ProfileNotFoundError):
             pm.resolve(None)
+
+    def test_edit_description(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        pm.create(name="dev", description="old desc")
+        config = pm.edit("dev", description="new desc")
+        assert config.profile.description == "new desc"
+        reloaded = pm.load("dev")
+        assert reloaded.profile.description == "new desc"
+
+    def test_edit_role_prompt(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        pm.create(name="dev", role_prompt="old prompt")
+        config = pm.edit("dev", role_prompt="new prompt")
+        assert config.role.prompt == "new prompt"
+
+    def test_edit_rename(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        pm.create(name="old-name", description="test")
+        config = pm.edit("old-name", new_name="new-name")
+        assert config.profile.name == "new-name"
+        assert pm.exists("new-name")
+        assert not pm.exists("old-name")
+
+    def test_edit_rename_conflict(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        pm.create(name="a")
+        pm.create(name="b")
+        with pytest.raises(CForgeError):
+            pm.edit("a", new_name="b")
+
+    def test_edit_not_found(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        with pytest.raises(ProfileNotFoundError):
+            pm.edit("nonexistent", description="test")

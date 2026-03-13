@@ -36,6 +36,7 @@ ctxforge run
 | `ctxforge run [PROFILE]` | Start AI CLI session with context |
 | `ctxforge profile create NAME` | Create a new profile |
 | `ctxforge profile list` | List all profiles |
+| `ctxforge profile edit NAME` | Edit profile name, description, or prompt |
 | `ctxforge profile show NAME` | Show profile details |
 | `ctxforge ctx profile [PROFILE]` | Show profile configuration |
 | `ctxforge ctx files [PROFILE]` | List key files with size info |
