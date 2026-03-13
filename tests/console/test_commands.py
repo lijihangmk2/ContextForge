@@ -234,29 +234,28 @@ class TestProfileCommands:
             ctxforge_project / ".ctxforge" / "profiles" / "reviewer" / "profile.toml"
         ).exists()
 
-    def test_profile_edit_desc(self, ctxforge_project: Path, monkeypatch):
+    def test_profile_edit_interactive(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
+        # Interactive: keep name, change desc, keep prompt, skip cli/auto_approve
         result = runner.invoke(
-            app, ["profile", "edit", "default", "--desc", "Updated desc"]
+            app, ["profile", "edit", "default"],
+            input="default\nUpdated desc\n\n\nn\n",
         )
         assert result.exit_code == 0, result.output
         assert "Updated profile 'default'" in result.output
 
     def test_profile_edit_rename(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
+        # Interactive: rename to "main", keep desc/prompt, skip cli/auto_approve
         result = runner.invoke(
-            app, ["profile", "edit", "default", "--name", "main"]
+            app, ["profile", "edit", "default"],
+            input="main\n\n\n\nn\n",
         )
         assert result.exit_code == 0, result.output
-        assert "Renamed profile 'default' → 'main'" in result.output
+        assert "Renamed" in result.output
         assert (
             ctxforge_project / ".ctxforge" / "profiles" / "main" / "profile.toml"
         ).exists()
-
-    def test_profile_edit_no_args(self, ctxforge_project: Path, monkeypatch):
-        monkeypatch.chdir(ctxforge_project)
-        result = runner.invoke(app, ["profile", "edit", "default"])
-        assert result.exit_code == 1
 
     def test_profile_create_duplicate(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
@@ -307,7 +306,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.0" in result.output
+        assert "1.4.1" in result.output
 
 
 class TestSetProcTitle:

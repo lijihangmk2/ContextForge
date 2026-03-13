@@ -1,11 +1,14 @@
-"""ctxforge profile sub-commands (create / list / show)."""
+"""ctxforge profile sub-commands (create / list / show / edit)."""
 
 from __future__ import annotations
+
+import sys
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from ctxforge.analysis.cli_detector import detect_ai_clis
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
 from ctxforge.exceptions import CForgeError, ProjectNotFoundError
@@ -70,35 +73,107 @@ def create_command(
     console.print(f"[green]Created profile '{name}'.[/green]")
 
 
+def _prompt(text: str, default: str = "") -> str:
+    """Prompt for input with proper CJK wide-character handling."""
+    if sys.stdin.isatty():
+        import questionary
+
+        result = questionary.text(text, default=default).ask()
+        if result is None:
+            return default
+        return result.strip() or default
+    # Fallback for piped input (tests, CI)
+    if default:
+        console.print(f"{text} \\[{default}]: ", end="")
+    else:
+        console.print(f"{text}: ", end="")
+    value = sys.stdin.readline().strip()
+    return value if value else default
+
+
+def _confirm(text: str, default: bool = False) -> bool:
+    """Yes/no prompt bypassing readline."""
+    hint = "Y/n" if default else "y/N"
+    console.print(f"{text} \\[{hint}]: ", end="")
+    value = sys.stdin.readline().strip().lower()
+    if not value:
+        return default
+    return value in ("y", "yes")
+
+
+def _select_cli(detected_clis: list[str], current: str | None) -> str | None:
+    """Let the user pick a CLI, with the current one as default."""
+    if not detected_clis:
+        return current
+    if len(detected_clis) == 1:
+        console.print(f"  CLI: [bold]{detected_clis[0]}[/bold]")
+        return detected_clis[0]
+    # Build numbered list, mark current
+    console.print("  Select CLI:")
+    default_idx = 1
+    for i, name in enumerate(detected_clis, 1):
+        marker = " (current)" if name == current else ""
+        console.print(f"    [{i}] {name}{marker}")
+        if name == current:
+            default_idx = i
+    choice = _prompt("  Choice", default=str(default_idx))
+    try:
+        return detected_clis[int(choice) - 1]
+    except (ValueError, IndexError):
+        return current
+
+
 @profile_app.command("edit")
 def edit_command(
     name: str = typer.Argument(..., help="Profile name to edit."),
-    new_name: str | None = typer.Option(None, "--name", "-n", help="New profile name."),
-    description: str | None = typer.Option(None, "--desc", "-d", help="New description."),
-    role_prompt: str | None = typer.Option(None, "--prompt", "-p", help="New role prompt."),
 ) -> None:
-    """Edit a profile's name, description, or role prompt."""
+    """Interactively edit a profile's settings."""
     try:
         _project, pm = _get_manager()
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if new_name is None and description is None and role_prompt is None:
-        console.print("[yellow]Nothing to change. Use --name, --desc, or --prompt.[/yellow]")
-        raise typer.Exit(1)
-
     try:
-        config = pm.edit(name, new_name=new_name, description=description, role_prompt=role_prompt)
+        config = pm.load(name)
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    display_name = config.profile.name
-    if new_name and new_name != name:
-        console.print(f"[green]Renamed profile '{name}' → '{display_name}'.[/green]")
+    console.print(f"[bold]Editing profile '{name}'[/bold]\n")
+
+    new_name = _prompt("Profile name", default=config.profile.name)
+    description = _prompt("Description", default=config.profile.description)
+    role_prompt = _prompt("Role prompt", default=config.role.prompt)
+
+    # CLI selection
+    detected_clis = detect_ai_clis()
+    cli_name = _select_cli(detected_clis, current=config.cli.name)
+
+    # Auto-approve
+    auto_approve = _confirm(
+        "Auto-approve CLI operations?",
+        default=config.cli.auto_approve,
+    )
+
+    try:
+        updated = pm.edit(
+            name,
+            new_name=new_name if new_name != name else None,
+            description=description,
+            role_prompt=role_prompt,
+            cli_name=cli_name,
+            auto_approve=auto_approve,
+        )
+    except CForgeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    display_name = updated.profile.name
+    if new_name != name:
+        console.print(f"\n[green]Renamed and updated profile '{name}' → '{display_name}'.[/green]")
     else:
-        console.print(f"[green]Updated profile '{display_name}'.[/green]")
+        console.print(f"\n[green]Updated profile '{display_name}'.[/green]")
 
 
 @profile_app.command("show")

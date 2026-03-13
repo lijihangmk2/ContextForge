@@ -105,6 +105,13 @@ class TestProfileManager:
         with pytest.raises(CForgeError):
             pm.edit("a", new_name="b")
 
+    def test_edit_cli_settings(self, tmp_path: Path):
+        pm = ProfileManager(tmp_path / "profiles")
+        pm.create(name="dev", cli_name="claude", auto_approve=False)
+        config = pm.edit("dev", cli_name="codex", auto_approve=True)
+        assert config.cli.name == "codex"
+        assert config.cli.auto_approve is True
+
     def test_edit_not_found(self, tmp_path: Path):
         pm = ProfileManager(tmp_path / "profiles")
         with pytest.raises(ProfileNotFoundError):

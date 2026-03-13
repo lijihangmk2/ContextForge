@@ -91,14 +91,18 @@ class ProfileManager:
         new_name: str | None = None,
         description: str | None = None,
         role_prompt: str | None = None,
+        cli_name: str | None = None,
+        auto_approve: bool | None = None,
     ) -> ProfileConfig:
-        """Edit an existing profile's metadata.
+        """Edit an existing profile's settings.
 
         Args:
             name: Current profile name.
             new_name: Rename the profile (directory + config).
             description: New description (empty string to clear).
             role_prompt: New role prompt (empty string to clear).
+            cli_name: CLI to use for this profile.
+            auto_approve: Whether to skip permission prompts.
 
         Returns:
             The updated ProfileConfig.
@@ -121,6 +125,10 @@ class ProfileManager:
             config.profile.description = description
         if role_prompt is not None:
             config.role.prompt = role_prompt
+        if cli_name is not None:
+            config.cli.name = cli_name
+        if auto_approve is not None:
+            config.cli.auto_approve = auto_approve
 
         target_name = new_name if new_name else name
         config.profile.name = target_name
