@@ -91,8 +91,10 @@ def _build_ctx_update(
     work_record_files: dict[str, str],
 ) -> str:
     record_list = _build_work_record_list(record_paths, work_record_files)
+    profile_dir = str(Path(profile_path).parent)
     return CTX_UPDATE.format(
         profile_path=profile_path,
+        profile_dir=profile_dir,
         work_record_section=record_list,
     )
 
@@ -103,8 +105,10 @@ def _build_ctx_compress(
     work_record_files: dict[str, str],
 ) -> str:
     record_list = _build_work_record_list(record_paths, work_record_files)
+    profile_dir = str(Path(profile_path).parent)
     return CTX_COMPRESS.format(
         profile_path=profile_path,
+        profile_dir=profile_dir,
         work_record_section=record_list,
     )
 
@@ -128,6 +132,10 @@ For each file, show whether it exists and its approximate size (lines and charac
 CTX_UPDATE = """\
 Read `{profile_path}` to understand the current profile configuration.
 
+**SCOPE RESTRICTION**: Only modify files that belong to THIS profile's directory \
+(`{profile_dir}/`). Do NOT read or modify work record files, key files, or \
+configurations of any other profile.
+
 ## 1. Work record files — PRIORITY
 Update the following work record files to reflect the current session. \
 Create any that don't exist.
@@ -147,9 +155,26 @@ For **pitfalls** files:
 - Do NOT duplicate entries already present in the file
 - Remove entries that have been permanently resolved
 
-## 2. Key files (listed in `{profile_path}` under `[key_files]`)
-Based on changes made in the current session, update stale key files.
-- Only update files whose content is actually outdated
+For **usermemo** files:
+- This file is user-owned — only append entries when the user explicitly asks to \
+record something
+- Do NOT delete, rewrite, or reorganize existing entries
+- Do NOT add entries based on your own judgment — only when the user says \
+"remember this", "note this", or similar
+
+## 2. Review key file list
+Review whether the current key file list in `{profile_path}` still fits the project:
+- **Suggest additions**: if important project files (e.g. design docs, API specs, \
+config references) are NOT in the key file list but would benefit future AI sessions, \
+list them as candidates with a brief reason.
+- **Suggest removals**: if any current key files are no longer relevant \
+(e.g. deleted, deprecated, or superseded), recommend removing them.
+- Present suggestions as a checklist and ask for confirmation before modifying \
+`{profile_path}`.
+
+## 3. Update key files
+After the key file list is finalized, update all stale content:
+- Read each key file; update only those whose content is actually outdated
 - Preserve the existing structure and style of each file
 - Do NOT rewrite files that are already accurate
 
@@ -159,6 +184,10 @@ Show a brief summary of all changes made.
 
 CTX_COMPRESS = """\
 Read `{profile_path}` to understand the current profile configuration.
+
+**SCOPE RESTRICTION**: Only modify files that belong to THIS profile's directory \
+(`{profile_dir}/`). Do NOT read or modify work record files, key files, or \
+configurations of any other profile.
 
 ## 1. Work record files — PRIORITY
 Compress the following work record files to keep them focused and useful:
@@ -176,6 +205,10 @@ For **pitfalls** files:
 - Remove entries for issues that have been permanently resolved
 - Tighten wording — each entry should be a concise, actionable reminder
 - Deduplicate entries that say the same thing differently
+
+For **usermemo** files:
+- Do NOT compress, delete, or reorganize any entries — this file is user-owned
+- Skip this file entirely during compression
 
 ## 2. Key files (listed in `{profile_path}` under `[key_files]`)
 For each key file, show its current size (lines/chars) and analyze compressibility.

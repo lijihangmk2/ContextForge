@@ -143,11 +143,30 @@ def _migrate_v4_to_v5(
         console.print("  All project tools active by default")
 
 
+def _migrate_v5_to_v6(
+    config: ProfileConfig,
+    project_config: ProjectConfig,
+) -> None:
+    """v5 → v6: add usermemo.md to work record files."""
+    console.print(
+        f"\n[bold]Upgrading profile '{config.profile.name}' "
+        f"(v5 → v6)[/bold]"
+    )
+    memo_key = "usermemo.md"
+    memo_desc = DEFAULT_WORK_RECORD[memo_key]
+    if memo_key not in config.work_record.files:
+        config.work_record.files[memo_key] = memo_desc
+        console.print(f"  Adding work record: {memo_key}")
+    else:
+        console.print(f"  {memo_key} already present")
+
+
 _MIGRATIONS: list[tuple[int, MigrateFn]] = [
     (2, _migrate_v1_to_v2),
     (3, _migrate_v2_to_v3),
     (4, _migrate_v3_to_v4),
     (5, _migrate_v4_to_v5),
+    (6, _migrate_v5_to_v6),
 ]
 
 
@@ -211,6 +230,10 @@ def _apply_defaults(
         config.tools = ToolsSection()
     elif target == 5:
         config.tools = ToolsSection()
+    elif target == 6:
+        memo_key = "usermemo.md"
+        if memo_key not in config.work_record.files:
+            config.work_record.files[memo_key] = DEFAULT_WORK_RECORD[memo_key]
 
 
 # ── Project migration ───────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 # ─── Schema versioning ─────────────────────────────────────────────────────
 
-CURRENT_PROFILE_VERSION = 5
+CURRENT_PROFILE_VERSION = 6
 CURRENT_PROJECT_VERSION = 2
 
 # ─── project.toml models ────────────────────────────────────────────────────
@@ -77,6 +77,7 @@ class ProfileCliSection(BaseModel):
 DEFAULT_WORK_RECORD: dict[str, str] = {
     "journal.md": "work journal — completed tasks, in-progress, TODOs",
     "pitfalls.md": "pitfalls — gotchas, lessons learned, warnings",
+    "usermemo.md": "user memo — persistent notes and instructions from the user",
 }
 
 

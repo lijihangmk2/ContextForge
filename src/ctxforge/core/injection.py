@@ -66,19 +66,31 @@ class SimpleInjection:
             Path(".ctxforge") / "profiles" / profile.profile.name
         )
         entries: list[str] = []
+        memo_entries: list[str] = []
         for filename, desc in profile.work_record.files.items():
             rel = profile_dir / filename
             full = self._root / rel
             if full.is_file():
-                entries.append(f"- {rel}  ({desc})")
-        if not entries:
+                if "memo" in filename:
+                    memo_entries.append(f"- {rel}  ({desc})")
+                else:
+                    entries.append(f"- {rel}  ({desc})")
+        if not entries and not memo_entries:
             return ""
-        header = (
+        parts: list[str] = [
             "[Work Record]\n"
             "IMPORTANT: Read these files first. They contain the AI's working "
-            "memory for this profile and take priority over key files:"
-        )
-        return header + "\n" + "\n".join(entries)
+            "memory for this profile and take priority over key files:",
+        ]
+        parts.extend(entries)
+        if memo_entries:
+            parts.append(
+                "\nThe following are user memos — persistent notes and "
+                "instructions from the user. Read and follow them, but do NOT "
+                "modify unless the user explicitly asks:"
+            )
+            parts.extend(memo_entries)
+        return "\n".join(parts)
 
     def _files_section(self, profile: ProfileConfig) -> str:
         if not profile.key_files.paths:
