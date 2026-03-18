@@ -43,7 +43,7 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
             result = runner.run("system context", auto_approve=True)
             mock_run.assert_called_once_with(
-                ["codex", "--approval-mode", "full-auto", "system context"],
+                ["codex", "--full-auto", "system context"],
             )
         assert result.ok
 
@@ -93,7 +93,7 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
             result = runner.run_oneshot("compress key files", auto_approve=True)
             mock_run.assert_called_once_with(
-                ["codex", "--approval-mode", "full-auto", "compress key files"],
+                ["codex", "--full-auto", "compress key files"],
             )
         assert result.ok
 

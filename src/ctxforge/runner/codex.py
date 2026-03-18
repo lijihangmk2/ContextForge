@@ -32,7 +32,7 @@ class CodexRunner:
         """
         cmd: list[str] = ["codex"]
         if auto_approve:
-            cmd.extend(["--approval-mode", "full-auto"])
+            cmd.append("--full-auto")
 
         combined = "\n\n".join(p for p in [system_prompt, initial_prompt] if p)
         if combined:
@@ -54,7 +54,7 @@ class CodexRunner:
         """Run a single non-interactive ``codex`` command."""
         cmd: list[str] = ["codex"]
         if auto_approve:
-            cmd.extend(["--approval-mode", "full-auto"])
+            cmd.append("--full-auto")
         cmd.append(prompt)
 
         try:
