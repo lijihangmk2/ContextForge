@@ -306,7 +306,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.3" in result.output
+        assert "1.4.4" in result.output
 
 
 class TestSetProcTitle:
@@ -320,4 +320,3 @@ class TestSetProcTitle:
 
             main()
             mock_spt.assert_called_once_with("ctxforge")
-
