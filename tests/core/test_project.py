@@ -1,7 +1,8 @@
 """Tests for Project class."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from ctxforge.core.project import Project, find_project_root
 from ctxforge.exceptions import ProjectNotFoundError

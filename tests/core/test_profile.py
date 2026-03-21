@@ -1,7 +1,8 @@
 """Tests for ProfileManager."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from ctxforge.core.profile import ProfileManager
 from ctxforge.exceptions import CForgeError, ProfileNotFoundError

@@ -1,7 +1,8 @@
 """Shared test fixtures."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
@@ -15,8 +16,8 @@ from ctxforge.spec.schema import (
     ProjectSection,
     RoleSection,
 )
-from ctxforge.storage.project_writer import write_project
 from ctxforge.storage.profile_writer import write_profile
+from ctxforge.storage.project_writer import write_project
 
 
 @pytest.fixture

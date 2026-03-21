@@ -1,15 +1,16 @@
 """Tests for TOML loader."""
 
-import pytest
 from pathlib import Path
 
-from ctxforge.spec.loader import load_project, load_profile
+import pytest
+
 from ctxforge.exceptions import (
-    ProjectNotFoundError,
+    InvalidProfileError,
     InvalidProjectError,
     ProfileNotFoundError,
-    InvalidProfileError,
+    ProjectNotFoundError,
 )
+from ctxforge.spec.loader import load_profile, load_project
 
 
 class TestLoadProject:
@@ -54,7 +55,10 @@ class TestLoadProfile:
             load_profile(tmp_path / "nonexistent.toml")
 
     def test_load_profile(self, tmp_path: Path):
-        content = b'[profile]\nname = "architect"\ndescription = "Design"\n\n[role]\nprompt = "You are an architect."\n'
+        content = (
+            b'[profile]\nname = "architect"\ndescription = "Design"\n\n'
+            b'[role]\nprompt = "You are an architect."\n'
+        )
         (tmp_path / "profile.toml").write_bytes(content)
         config = load_profile(tmp_path)
         assert config.profile.name == "architect"

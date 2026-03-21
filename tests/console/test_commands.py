@@ -3,9 +3,12 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from ctxforge.spec.schema import ProfileCliSection
+from ctxforge.storage.profile_writer import write_profile
 from typer.testing import CliRunner
 
 from ctxforge.console.application import app
+from ctxforge.core.profile import ProfileManager
 
 runner = CliRunner()
 
@@ -148,7 +151,8 @@ class TestInitCommand:
             patch("ctxforge.console.commands.init.detect_ai_clis", return_value=["claude"]),
             patch("ctxforge.console.commands.init.detect_doc_candidates", return_value=[]),
         ):
-            # language → accept new profile → key files prompt → name → desc → auto_approve → decline run
+            # language → accept new profile → key files prompt
+            # → name → desc → auto_approve → decline run
             result = runner.invoke(
                 app,
                 ["init", str(ctxforge_project)],
@@ -185,6 +189,60 @@ class TestLaunchSession:
         # The greeting is passed via -p flag
         full_cmd = " ".join(call_args)
         assert "compress" in full_cmd.lower()
+
+    def test_launch_session_codex_resume_uses_saved_session(self, ctxforge_project: Path):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+        session_file = pm.profile_path("default").parent / ".session"
+        session_file.write_text("real-codex-session", encoding="utf-8")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+
+        with (
+            patch("ctxforge.console.commands.run._ask_resume_or_new", return_value=True),
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["codex", "resume", "real-codex-session"]
+        assert len(call_args) == 4
+        assert "ready" in call_args[3]
+
+    def test_launch_session_codex_new_session_saves_real_session_id(self, ctxforge_project: Path):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+        session_file = pm.profile_path("default").parent / ".session"
+        session_file.write_text("stale-random-uuid", encoding="utf-8")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = "real-codex-session"
+
+        with (
+            patch("ctxforge.console.commands.run._ask_resume_or_new", return_value=False),
+            patch("ctxforge.console.commands.run.get_runner") as mock_get_runner,
+        ):
+            mock_runner = MagicMock()
+            mock_runner.run.return_value = mock_result
+            mock_get_runner.return_value = mock_runner
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        assert session_file.read_text(encoding="utf-8") == "real-codex-session"
 
 
 class TestRunCommand:
@@ -306,7 +364,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.4" in result.output
+        assert "1.4.5" in result.output
 
 
 class TestSetProcTitle:

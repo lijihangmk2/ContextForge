@@ -9,7 +9,6 @@ from ctxforge.spec.schema import (
     ProfileConfig,
     ProfileSection,
     RoleSection,
-    WorkRecordSection,
 )
 
 

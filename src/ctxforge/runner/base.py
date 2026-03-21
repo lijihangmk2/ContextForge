@@ -14,6 +14,7 @@ class RunResult:
     exit_code: int
     stdout: str
     stderr: str
+    session_id: str | None = None
 
     @property
     def ok(self) -> bool:

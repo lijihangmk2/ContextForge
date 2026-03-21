@@ -2,9 +2,9 @@
 
 import pytest
 
-from ctxforge.runner.registry import get_runner
-from ctxforge.runner.claude import ClaudeRunner
 from ctxforge.exceptions import CliNotFoundError
+from ctxforge.runner.claude import ClaudeRunner
+from ctxforge.runner.registry import get_runner
 
 
 class TestRegistry:

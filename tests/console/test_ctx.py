@@ -56,7 +56,6 @@ class TestCtxFiles:
         readme.write_text("# Test\nHello world\n", encoding="utf-8")
 
         # Update profile to include key file
-        from ctxforge.core.profile import ProfileManager
         from ctxforge.spec.schema import KeyFilesSection, ProfileConfig, ProfileSection, RoleSection
         from ctxforge.storage.profile_writer import write_profile
 
@@ -75,7 +74,7 @@ class TestCtxFiles:
 
     def test_missing_file(self, ctxforge_project: Path, monkeypatch):
         monkeypatch.chdir(ctxforge_project)
-        from ctxforge.spec.schema import KeyFilesSection, ProfileConfig, ProfileSection, RoleSection
+        from ctxforge.spec.schema import KeyFilesSection, ProfileConfig, ProfileSection
         from ctxforge.storage.profile_writer import write_profile
 
         profile_path = ctxforge_project / ".ctxforge" / "profiles" / "default" / "profile.toml"

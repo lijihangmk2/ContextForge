@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.5] - 2026-03-21
+
+### Fixed
+
+- Fixed `ctxforge run` for Codex so choosing continue now resumes the real previous Codex session instead of starting a new one.
+- Updated Codex session persistence to store the actual Codex session ID discovered after launch, rather than a synthetic UUID.
+
 ## [1.4.4] - 2026-03-19
 
 ### Fixed

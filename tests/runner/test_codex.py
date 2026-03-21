@@ -57,6 +57,44 @@ class TestCodexRunner:
             mock_run.assert_called_once_with(["codex"])
         assert result.ok
 
+    def test_run_resume_session(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+            result = runner.run("system context", "hello", resume_id="abc-123")
+            mock_run.assert_called_once_with(
+                ["codex", "resume", "abc-123", "hello"],
+            )
+        assert result.ok
+
+    def test_run_discovers_session_id(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with (
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result),
+            patch.object(runner, "_find_latest_session_id", return_value="sid-123") as mock_find,
+        ):
+            result = runner.run("system context")
+        mock_find.assert_called_once()
+        assert result.session_id == "sid-123"
+
+    def test_run_resume_does_not_discover_session_id(self):
+        runner = CodexRunner()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with (
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result),
+            patch.object(runner, "_find_latest_session_id") as mock_find,
+        ):
+            result = runner.run("system context", resume_id="abc-123")
+        mock_find.assert_not_called()
+        assert result.session_id is None
+
     def test_run_failure(self):
         runner = CodexRunner()
         mock_result = MagicMock()

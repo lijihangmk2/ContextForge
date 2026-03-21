@@ -132,6 +132,13 @@ def _save_session_id(profile_dir: Path, session_id: str) -> None:
     session_file.write_text(session_id, encoding="utf-8")
 
 
+def _clear_session_id(profile_dir: Path) -> None:
+    """Remove any persisted session ID for a profile."""
+    session_file = profile_dir / SESSION_FILE
+    if session_file.exists():
+        session_file.unlink()
+
+
 def _ask_resume_or_new() -> bool:
     """Ask user whether to resume previous session. Returns True to resume."""
     if not sys.stdin.isatty():
@@ -174,16 +181,26 @@ def launch_session(
     resume_id: str | None = None
     session_id: str | None = None
     saved_sid = _load_session_id(profile_dir)
-    if saved_sid and not compress:
-        if _ask_resume_or_new():
-            resume_id = saved_sid
-            console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
+    if cli_name == "codex":
+        if saved_sid and not compress:
+            if _ask_resume_or_new():
+                resume_id = saved_sid
+                console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
+            else:
+                _clear_session_id(profile_dir)
+        else:
+            _clear_session_id(profile_dir)
+    else:
+        if saved_sid and not compress:
+            if _ask_resume_or_new():
+                resume_id = saved_sid
+                console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
+            else:
+                session_id = str(uuid.uuid4())
+                _save_session_id(profile_dir, session_id)
         else:
             session_id = str(uuid.uuid4())
             _save_session_id(profile_dir, session_id)
-    else:
-        session_id = str(uuid.uuid4())
-        _save_session_id(profile_dir, session_id)
 
     builder = PromptBuilder(project.root)
     language = project.config.defaults.language
@@ -256,6 +273,9 @@ def launch_session(
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")
         return 1
+
+    if cli_name == "codex" and not resume_id and result.session_id:
+        _save_session_id(profile_dir, result.session_id)
 
     return 0 if result.ok else result.exit_code
 
