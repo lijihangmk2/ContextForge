@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.6] - 2026-04-01
+
+### Fixed
+
+- Unified saved-session recovery UX for Codex and Claude with `continue / new / list` choices in `ctxforge run`.
+- Fixed resumed Codex sessions so both direct continue and list-selected sessions no longer receive new-session greeting prompts.
+- Added readable session previews in saved-session lists to make manual selection practical.
+
 ## [1.4.5] - 2026-03-21
 
 ### Fixed

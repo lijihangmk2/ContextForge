@@ -1,5 +1,7 @@
 """Integration tests for CLI commands."""
 
+import io
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -206,7 +208,7 @@ class TestLaunchSession:
         mock_result.session_id = None
 
         with (
-            patch("ctxforge.console.commands.run._ask_resume_or_new", return_value=True),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
             patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
         ):
             exit_code = launch_session(ctxforge_project, "default")
@@ -214,8 +216,106 @@ class TestLaunchSession:
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
         assert call_args[:3] == ["codex", "resume", "real-codex-session"]
-        assert len(call_args) == 4
-        assert "ready" in call_args[3]
+        assert len(call_args) == 3
+
+    def test_launch_session_claude_resume_uses_saved_session(self, ctxforge_project: Path):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        session_file = pm.profile_path("default").parent / ".session"
+        session_file.write_text("real-claude-session", encoding="utf-8")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+
+        with (
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["claude", "--resume", "real-claude-session"]
+
+    def test_launch_session_claude_discovers_recent_session_when_session_file_missing(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+
+        with (
+            patch(
+                "ctxforge.console.commands.run._discover_claude_session_id",
+                return_value="recent-claude-session",
+            ),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["claude", "--resume", "recent-claude-session"]
+
+    def test_launch_session_claude_list_sessions_selects_choice(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        session_file = pm.profile_path("default").parent / ".session"
+        session_file.write_text("real-claude-session", encoding="utf-8")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+
+        with (
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="list"),
+            patch(
+                "ctxforge.console.commands.run._select_claude_session",
+                return_value="picked-claude-session",
+            ),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["claude", "--resume", "picked-claude-session"]
+        assert session_file.read_text(encoding="utf-8") == "picked-claude-session"
+
+    def test_select_claude_session_shows_preview(self):
+        from ctxforge.console.commands.run import _select_claude_session
+        from ctxforge.runner.claude import ClaudeSessionInfo
+
+        sessions = [
+            ClaudeSessionInfo(
+                session_id="picked-claude-session",
+                cwd="/repo",
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
+                path=Path("/tmp/session.jsonl"),
+                preview="Claude 最后一条用户可识别的消息预览",
+            )
+        ]
+
+        stdin = io.StringIO("1\n")
+        with (
+            patch("ctxforge.console.commands.run.ClaudeRunner.list_sessions", return_value=sessions),
+            patch("sys.stdin", stdin),
+            patch("sys.stdout.isatty", return_value=True),
+            patch("ctxforge.console.commands.run.console.print") as mock_print,
+        ):
+            selected = _select_claude_session(Path("/repo"))
+
+        assert selected == "picked-claude-session"
+        rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
+        assert "Claude 最后一条用户可识别的消息预览" in rendered
 
     def test_launch_session_codex_new_session_saves_real_session_id(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import launch_session
@@ -233,7 +333,7 @@ class TestLaunchSession:
         mock_result.session_id = "real-codex-session"
 
         with (
-            patch("ctxforge.console.commands.run._ask_resume_or_new", return_value=False),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="new"),
             patch("ctxforge.console.commands.run.get_runner") as mock_get_runner,
         ):
             mock_runner = MagicMock()
@@ -243,6 +343,98 @@ class TestLaunchSession:
 
         assert exit_code == 0
         assert session_file.read_text(encoding="utf-8") == "real-codex-session"
+
+    def test_launch_session_codex_discovers_recent_session_when_session_file_missing(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+
+        with (
+            patch(
+                "ctxforge.console.commands.run._discover_recent_codex_session_id",
+                return_value="recent-codex-session",
+            ),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["codex", "resume", "recent-codex-session"]
+
+    def test_launch_session_codex_list_sessions_selects_choice(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+
+        with (
+            patch(
+                "ctxforge.console.commands.run._discover_recent_codex_session_id",
+                return_value="recent-codex-session",
+            ),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="list"),
+            patch(
+                "ctxforge.console.commands.run._select_codex_session",
+                return_value="picked-codex-session",
+            ),
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["codex", "resume", "picked-codex-session"]
+        session_file = pm.profile_path("default").parent / ".session"
+        assert session_file.read_text(encoding="utf-8") == "picked-codex-session"
+
+    def test_select_codex_session_shows_preview(self):
+        from ctxforge.console.commands.run import _select_codex_session
+        from ctxforge.runner.codex import CodexSessionInfo
+
+        sessions = [
+            CodexSessionInfo(
+                session_id="picked-codex-session",
+                cwd="/repo",
+                created_at=datetime(2026, 4, 1, 0, 0, tzinfo=UTC),
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
+                path=Path("/tmp/session.jsonl"),
+                preview="最后一条用户可识别的消息预览",
+            )
+        ]
+
+        stdin = io.StringIO("1\n")
+        with (
+            patch("ctxforge.console.commands.run.CodexRunner.list_sessions", return_value=sessions),
+            patch("sys.stdin", stdin),
+            patch("sys.stdout.isatty", return_value=True),
+            patch("ctxforge.console.commands.run.console.print") as mock_print,
+        ):
+            selected = _select_codex_session(Path("/repo"))
+
+        assert selected == "picked-codex-session"
+        rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
+        assert "最后一条用户可识别的消息预览" in rendered
 
 
 class TestRunCommand:
@@ -364,7 +556,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.5" in result.output
+        assert "1.4.6" in result.output
 
 
 class TestSetProcTitle:

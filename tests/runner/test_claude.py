@@ -1,5 +1,7 @@
 """Tests for ClaudeRunner."""
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -108,6 +110,68 @@ class TestClaudeRunner:
         assert "--resume" in cmd
         assert "--mcp-config" in cmd
         assert "--append-system-prompt" not in cmd
+
+    def test_list_sessions_sorted_by_modified_time(self, tmp_path: Path):
+        runner = ClaudeRunner()
+        project_dir = tmp_path / ".claude" / "projects" / "-repo"
+        project_dir.mkdir(parents=True)
+
+        older = project_dir / "older-session.jsonl"
+        older.write_text(
+            json.dumps({"type": "last-prompt", "lastPrompt": "older", "sessionId": "older-session"}),
+            encoding="utf-8",
+        )
+        newer = project_dir / "newer-session.jsonl"
+        newer.write_text(
+            json.dumps({"type": "last-prompt", "lastPrompt": "newer", "sessionId": "newer-session"}),
+            encoding="utf-8",
+        )
+
+        older_time = 1_700_000_000
+        newer_time = 1_800_000_000
+        import os
+        os.utime(older, (older_time, older_time))
+        os.utime(newer, (newer_time, newer_time))
+
+        with patch("ctxforge.runner.claude.Path.home", return_value=tmp_path):
+            sessions = runner.list_sessions(cwd=Path("/repo"))
+
+        assert [session.session_id for session in sessions] == [
+            "newer-session",
+            "older-session",
+        ]
+
+    def test_list_sessions_extracts_preview(self, tmp_path: Path):
+        runner = ClaudeRunner()
+        project_dir = tmp_path / ".claude" / "projects" / "-repo"
+        project_dir.mkdir(parents=True)
+        session_file = project_dir / "preview-session.jsonl"
+        session_file.write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "message": {"role": "user", "content": "一条较早的消息"},
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "last-prompt",
+                            "lastPrompt": "这是最后一条提示，用来展示给用户恢复 session。",
+                            "sessionId": "preview-session",
+                        }
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("ctxforge.runner.claude.Path.home", return_value=tmp_path):
+            sessions = runner.list_sessions(cwd=Path("/repo"))
+
+        assert len(sessions) == 1
+        assert "恢复 session" in sessions[0].preview
 
     def test_run_failure(self):
         runner = ClaudeRunner()

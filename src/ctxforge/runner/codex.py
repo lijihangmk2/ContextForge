@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult
+
+
+@dataclass(frozen=True)
+class CodexSessionInfo:
+    """Discovered Codex session metadata."""
+
+    session_id: str
+    cwd: str
+    created_at: datetime
+    modified_at: datetime
+    path: Path
+    preview: str = ""
 
 
 class CodexRunner:
@@ -39,8 +52,6 @@ class CodexRunner:
 
         if resume_id:
             cmd.extend(["resume", resume_id])
-            if initial_prompt:
-                cmd.append(initial_prompt)
         else:
             combined = "\n\n".join(p for p in [system_prompt, initial_prompt] if p)
             if combined:
@@ -55,7 +66,7 @@ class CodexRunner:
 
         discovered_session_id = None
         if not resume_id:
-            discovered_session_id = self._find_latest_session_id(Path.cwd(), started_at)
+            discovered_session_id = self.find_latest_session_id(Path.cwd(), since=started_at)
 
         return RunResult(
             exit_code=proc.returncode,
@@ -83,25 +94,49 @@ class CodexRunner:
 
         return RunResult(exit_code=proc.returncode, stdout="", stderr="")
 
-    def _find_latest_session_id(self, cwd: Path, started_at: datetime) -> str | None:
-        """Find the newest Codex session ID created for this cwd since *started_at*."""
+    def find_latest_session_id(
+        self, cwd: Path, *, since: datetime | None = None,
+    ) -> str | None:
+        """Find the newest Codex session ID for *cwd*, optionally filtered by time."""
+        sessions = self.list_sessions(cwd=cwd, since=since)
+        return sessions[0].session_id if sessions else None
+
+    def list_sessions(
+        self, *, cwd: Path | None = None, since: datetime | None = None,
+    ) -> list[CodexSessionInfo]:
+        """List discovered Codex sessions sorted by most recently modified first."""
         sessions_root = Path.home() / ".codex" / "sessions"
         if not sessions_root.exists():
-            return None
+            return []
 
-        cwd_str = str(cwd.resolve())
-        latest_match: tuple[datetime, str] | None = None
+        cwd_str = str(cwd.resolve()) if cwd is not None else None
+        matches: list[CodexSessionInfo] = []
         for path in sessions_root.rglob("*.jsonl"):
             session = self._read_session_meta(path)
             if session is None:
                 continue
-            session_id, session_cwd, session_time = session
-            if session_cwd != cwd_str or session_time < started_at:
+            session_id, session_cwd, created_at = session
+            if cwd_str is not None and session_cwd != cwd_str:
                 continue
-            if latest_match is None or session_time > latest_match[0]:
-                latest_match = (session_time, session_id)
+            if since is not None and created_at < since:
+                continue
+            try:
+                modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+            except OSError:
+                continue
+            matches.append(
+                CodexSessionInfo(
+                    session_id=session_id,
+                    cwd=session_cwd,
+                    created_at=created_at,
+                    modified_at=modified_at,
+                    path=path,
+                    preview=self._read_session_preview(path),
+                )
+            )
 
-        return latest_match[1] if latest_match else None
+        matches.sort(key=lambda session: session.modified_at, reverse=True)
+        return matches
 
     @staticmethod
     def _read_session_meta(path: Path) -> tuple[str, str, datetime] | None:
@@ -120,3 +155,60 @@ class CodexRunner:
             return session_id, cwd, datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except (IndexError, OSError, ValueError, json.JSONDecodeError):
             return None
+
+    @staticmethod
+    def _read_session_preview(path: Path) -> str:
+        """Read a short human-readable preview from the end of a session log."""
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return ""
+
+        for line in reversed(lines):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            preview = CodexRunner._extract_preview_text(payload)
+            if preview:
+                return preview
+        return ""
+
+    @staticmethod
+    def _extract_preview_text(payload: dict) -> str:
+        """Extract the most useful preview text from one session event."""
+        event_type = payload.get("type")
+        data = payload.get("payload", {})
+
+        if event_type == "event_msg":
+            if data.get("type") == "task_complete":
+                message = data.get("last_agent_message")
+                if isinstance(message, str):
+                    return CodexRunner._normalize_preview(message)
+            message = data.get("message")
+            if isinstance(message, str):
+                return CodexRunner._normalize_preview(message)
+
+        if event_type == "response_item" and data.get("type") == "message":
+            content = data.get("content", [])
+            if isinstance(content, list):
+                parts: list[str] = []
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+                if parts:
+                    return CodexRunner._normalize_preview(" ".join(parts))
+
+        return ""
+
+    @staticmethod
+    def _normalize_preview(text: str, limit: int = 60) -> str:
+        """Collapse whitespace and trim preview text for list display."""
+        collapsed = " ".join(text.split())
+        if len(collapsed) <= limit:
+            return collapsed
+        return collapsed[-limit:]

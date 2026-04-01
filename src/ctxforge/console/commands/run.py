@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import uuid
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -17,6 +19,8 @@ from ctxforge.core.project import Project
 from ctxforge.core.prompt_builder import PromptBuilder
 from ctxforge.core.toolchain import ToolStatus, build_mcp_config, resolve_tools
 from ctxforge.exceptions import CForgeError, ProfileNotFoundError, ProjectNotFoundError
+from ctxforge.runner.claude import ClaudeRunner
+from ctxforge.runner.codex import CodexRunner
 from ctxforge.runner.registry import get_runner
 from ctxforge.spec.schema import ProfileConfig
 from ctxforge.storage.commands_writer import write_commands
@@ -115,6 +119,8 @@ def _ensure_context_files(profile_dir: Path, profile_config: ProfileConfig) -> N
 
 
 SESSION_FILE = ".session"
+CODEX_RESUME_LOOKBACK = timedelta(days=1)
+CODEX_LIST_LIMIT = 20
 
 
 def _load_session_id(profile_dir: Path) -> str | None:
@@ -139,22 +145,105 @@ def _clear_session_id(profile_dir: Path) -> None:
         session_file.unlink()
 
 
-def _ask_resume_or_new() -> bool:
-    """Ask user whether to resume previous session. Returns True to resume."""
+def _discover_recent_codex_session_id(cwd: Path) -> str | None:
+    """Find a recent Codex session for the current working directory."""
+    since = datetime.now(UTC) - CODEX_RESUME_LOOKBACK
+    return CodexRunner().find_latest_session_id(cwd, since=since)
+
+
+def _discover_claude_session_id(cwd: Path) -> str | None:
+    """Find the latest Claude session for the current working directory."""
+    return ClaudeRunner().find_latest_session_id(cwd)
+
+
+def _ask_session_action(*, allow_list: bool) -> str:
+    """Ask whether to resume, start new, or optionally list saved sessions."""
     if not sys.stdin.isatty():
-        return True
-    console.print(
-        "[bold]Previous session found.[/bold] "
-        "Continue or start new? \\[C/n]: ",
-        end="",
-    )
+        return "resume"
+    options = "Continue, start new, or list sessions? \\[C/n/l]: " if allow_list else "Continue or start new? \\[C/n]: "
+    console.print("[bold]Previous session found.[/bold] " + options, end="")
     value = sys.stdin.readline().strip().lower()
     if not value or value in ("c", "continue", "y", "yes"):
-        return True
-    return False
+        return "resume"
+    if allow_list and value in ("l", "list"):
+        return "list"
+    return "new"
 
 
+def _select_saved_session(
+    *,
+    cwd: Path,
+    fetch_sessions: Callable[[Path], Sequence[object]],
+    title: str,
+    empty_message: str,
+) -> str | None:
+    """List saved sessions for the current cwd and let the user choose one."""
+    sessions = list(fetch_sessions(cwd))[:CODEX_LIST_LIMIT]
+    if not sessions:
+        console.print(f"[yellow]{empty_message}[/yellow]")
+        return None
 
+    console.print(f"[bold]{title}[/bold] (most recent first):")
+    for i, session in enumerate(sessions, 1):
+        modified = session.modified_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        preview = f"  {session.preview}" if getattr(session, "preview", "") else ""
+        console.print(
+            f"  [{i}] {modified}  {session.session_id[:8]}  "
+            f"{Path(session.cwd).name or session.cwd}{preview}"
+        )
+
+    console.print("Select a session number, or press Enter to cancel: ", end="")
+    value = sys.stdin.readline().strip()
+    if not value:
+        return None
+    try:
+        index = int(value) - 1
+    except ValueError:
+        return None
+    if index < 0 or index >= len(sessions):
+        return None
+    return sessions[index].session_id
+
+
+def _select_codex_session(cwd: Path) -> str | None:
+    """List saved Codex sessions for the current cwd and let the user choose one."""
+    return _select_saved_session(
+        cwd=cwd,
+        fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
+        title="Saved Codex sessions",
+        empty_message="No saved Codex sessions found for this project.",
+    )
+
+
+def _select_claude_session(cwd: Path) -> str | None:
+    """List saved Claude sessions for the current cwd and let the user choose one."""
+    return _select_saved_session(
+        cwd=cwd,
+        fetch_sessions=lambda current_cwd: ClaudeRunner().list_sessions(cwd=current_cwd),
+        title="Saved Claude sessions",
+        empty_message="No saved Claude sessions found for this project.",
+    )
+
+
+def _resume_with_saved_session(
+    *,
+    profile_dir: Path,
+    saved_sid: str,
+    select_session: Callable[[Path], str | None] | None,
+    cwd: Path,
+) -> tuple[str | None, str | None]:
+    """Resolve whether to resume an existing session or start a new one."""
+    action = _ask_session_action(allow_list=select_session is not None)
+    if action == "resume":
+        console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
+        return saved_sid, None
+    if action == "list" and select_session is not None:
+        selected_sid = select_session(cwd)
+        if selected_sid:
+            _save_session_id(profile_dir, selected_sid)
+            console.print(f"  [dim]Resuming session {selected_sid[:8]}...[/dim]")
+            return selected_sid, None
+    return None, str(uuid.uuid4())
 
 def launch_session(
     project_root: Path,
@@ -180,19 +269,41 @@ def launch_session(
     # ── Session management ─────────────────────────────────────────────
     resume_id: str | None = None
     session_id: str | None = None
+    cwd = Path.cwd()
     saved_sid = _load_session_id(profile_dir)
     if cli_name == "codex":
+        if not saved_sid and not compress:
+            saved_sid = _discover_recent_codex_session_id(cwd)
         if saved_sid and not compress:
-            if _ask_resume_or_new():
-                resume_id = saved_sid
-                console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
-            else:
+            resume_id, session_id = _resume_with_saved_session(
+                profile_dir=profile_dir,
+                saved_sid=saved_sid,
+                select_session=_select_codex_session,
+                cwd=cwd,
+            )
+            if session_id:
                 _clear_session_id(profile_dir)
         else:
             _clear_session_id(profile_dir)
+    elif cli_name == "claude":
+        if not saved_sid and not compress:
+            saved_sid = _discover_claude_session_id(cwd)
+        if saved_sid and not compress:
+            resume_id, session_id = _resume_with_saved_session(
+                profile_dir=profile_dir,
+                saved_sid=saved_sid,
+                select_session=_select_claude_session,
+                cwd=cwd,
+            )
+            if session_id:
+                _save_session_id(profile_dir, session_id)
+        else:
+            session_id = str(uuid.uuid4())
+            _save_session_id(profile_dir, session_id)
     else:
         if saved_sid and not compress:
-            if _ask_resume_or_new():
+            action = _ask_session_action(allow_list=False)
+            if action == "resume":
                 resume_id = saved_sid
                 console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
             else:
