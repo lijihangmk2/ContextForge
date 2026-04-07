@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ctxforge.exceptions import RunnerError
@@ -105,7 +105,9 @@ class ClaudeRunner:
         for path in project_dir.glob("*.jsonl"):
             session_id = path.stem
             try:
-                modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+                modified_at = datetime.fromtimestamp(
+                    path.stat().st_mtime, tz=timezone.utc
+                )
             except OSError:
                 continue
             matches.append(
@@ -147,7 +149,7 @@ class ClaudeRunner:
         return ""
 
     @staticmethod
-    def _extract_preview_text(payload: dict) -> str:
+    def _extract_preview_text(payload: dict[str, object]) -> str:
         """Extract a useful preview string from one Claude session event."""
         event_type = payload.get("type")
         if event_type == "last-prompt":

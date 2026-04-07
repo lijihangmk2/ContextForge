@@ -118,12 +118,24 @@ class TestClaudeRunner:
 
         older = project_dir / "older-session.jsonl"
         older.write_text(
-            json.dumps({"type": "last-prompt", "lastPrompt": "older", "sessionId": "older-session"}),
+            json.dumps(
+                {
+                    "type": "last-prompt",
+                    "lastPrompt": "older",
+                    "sessionId": "older-session",
+                }
+            ),
             encoding="utf-8",
         )
         newer = project_dir / "newer-session.jsonl"
         newer.write_text(
-            json.dumps({"type": "last-prompt", "lastPrompt": "newer", "sessionId": "newer-session"}),
+            json.dumps(
+                {
+                    "type": "last-prompt",
+                    "lastPrompt": "newer",
+                    "sessionId": "newer-session",
+                }
+            ),
             encoding="utf-8",
         )
 

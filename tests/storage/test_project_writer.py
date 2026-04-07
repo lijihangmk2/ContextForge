@@ -1,7 +1,11 @@
 """Tests for project_writer."""
 
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
 
 from ctxforge.spec.schema import CliConfig, DefaultsConfig, ProjectConfig, ProjectSection
 from ctxforge.storage.project_writer import write_project

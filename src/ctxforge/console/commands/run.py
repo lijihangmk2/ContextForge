@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import uuid
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -119,17 +121,37 @@ def _ensure_context_files(profile_dir: Path, profile_config: ProfileConfig) -> N
 
 
 SESSION_FILE = ".session"
-CODEX_RESUME_LOOKBACK = timedelta(days=1)
+SESSION_INDEX_FILE = "sessions.json"
 CODEX_LIST_LIMIT = 20
+
+
+@dataclass(frozen=True)
+class ProfileSessionEntry:
+    """A session entry owned by one profile."""
+
+    session_id: str
+    cwd: str
+    modified_at: datetime
+    preview: str = ""
 
 
 def _load_session_id(profile_dir: Path) -> str | None:
     """Read the saved session ID for a profile, or None."""
+    profile_sessions = _load_profile_sessions(profile_dir)
     session_file = profile_dir / SESSION_FILE
-    if session_file.exists():
-        sid = session_file.read_text(encoding="utf-8").strip()
-        return sid if sid else None
-    return None
+    if not session_file.exists():
+        return None
+
+    sid = session_file.read_text(encoding="utf-8").strip()
+    if not sid:
+        return None
+
+    if not profile_sessions:
+        return sid
+
+    if sid in {session.session_id for session in profile_sessions}:
+        return sid
+    return profile_sessions[0].session_id
 
 
 def _save_session_id(profile_dir: Path, session_id: str) -> None:
@@ -145,22 +167,149 @@ def _clear_session_id(profile_dir: Path) -> None:
         session_file.unlink()
 
 
-def _discover_recent_codex_session_id(cwd: Path) -> str | None:
-    """Find a recent Codex session for the current working directory."""
-    since = datetime.now(UTC) - CODEX_RESUME_LOOKBACK
-    return CodexRunner().find_latest_session_id(cwd, since=since)
+def _load_profile_sessions(profile_dir: Path) -> list[ProfileSessionEntry]:
+    """Load the per-profile session index."""
+    index_file = profile_dir / SESSION_INDEX_FILE
+    if not index_file.exists():
+        return []
+
+    try:
+        raw = json.loads(index_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
+
+    sessions: list[ProfileSessionEntry] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        session_id = item.get("session_id")
+        cwd = item.get("cwd")
+        modified_at = item.get("modified_at")
+        preview = item.get("preview", "")
+        if not (
+            isinstance(session_id, str)
+            and isinstance(cwd, str)
+            and isinstance(modified_at, str)
+            and isinstance(preview, str)
+        ):
+            continue
+        try:
+            parsed_time = datetime.fromisoformat(modified_at)
+        except ValueError:
+            continue
+        sessions.append(
+            ProfileSessionEntry(
+                session_id=session_id,
+                cwd=cwd,
+                modified_at=parsed_time,
+                preview=preview,
+            )
+        )
+
+    sessions.sort(key=lambda session: session.modified_at, reverse=True)
+    return sessions
 
 
-def _discover_claude_session_id(cwd: Path) -> str | None:
-    """Find the latest Claude session for the current working directory."""
-    return ClaudeRunner().find_latest_session_id(cwd)
+def _save_profile_sessions(
+    profile_dir: Path,
+    sessions: Sequence[ProfileSessionEntry],
+) -> None:
+    """Persist the per-profile session index."""
+    payload = [
+        {
+            "session_id": session.session_id,
+            "cwd": session.cwd,
+            "modified_at": session.modified_at.isoformat(),
+            "preview": session.preview,
+        }
+        for session in sessions
+    ]
+    (profile_dir / SESSION_INDEX_FILE).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _to_profile_session_entry(session: object) -> ProfileSessionEntry | None:
+    """Convert a runner-specific session object into a profile session entry."""
+    session_id = getattr(session, "session_id", None)
+    cwd = getattr(session, "cwd", None)
+    modified_at = getattr(session, "modified_at", None)
+    preview = getattr(session, "preview", "")
+    if not (
+        isinstance(session_id, str)
+        and isinstance(cwd, str)
+        and isinstance(modified_at, datetime)
+    ):
+        return None
+    if not isinstance(preview, str):
+        preview = ""
+    return ProfileSessionEntry(
+        session_id=session_id,
+        cwd=cwd,
+        modified_at=modified_at,
+        preview=preview,
+    )
+
+
+def _upsert_profile_session(
+    profile_dir: Path,
+    session_id: str,
+    *,
+    cwd: Path,
+    fetch_sessions: Callable[[Path], Sequence[object]] | None = None,
+) -> None:
+    """Record a session under this profile only."""
+    sessions = [s for s in _load_profile_sessions(profile_dir) if s.session_id != session_id]
+    entry: ProfileSessionEntry | None = None
+    if fetch_sessions is not None:
+        entry = next(
+            (
+                converted
+                for session in fetch_sessions(cwd)
+                if (converted := _to_profile_session_entry(session)) is not None
+                and converted.session_id == session_id
+            ),
+            None,
+        )
+    if entry is None:
+        entry = ProfileSessionEntry(
+            session_id=session_id,
+            cwd=str(cwd.resolve()),
+            modified_at=datetime.now(timezone.utc),
+        )
+    _save_profile_sessions(profile_dir, [entry, *sessions])
+
+
+def _discover_recent_codex_session_id(profile_dir: Path, cwd: Path) -> str | None:
+    """Find a recent Codex session owned by the current profile."""
+    profile_sessions = _load_profile_sessions(profile_dir)
+    if profile_sessions:
+        return profile_sessions[0].session_id
+    # `C` must never auto-pick sessions from another profile. Global runner scans
+    # are only allowed from `L`, where the user explicitly inspects candidates.
+    return None
+
+
+def _discover_claude_session_id(profile_dir: Path, cwd: Path) -> str | None:
+    """Find the latest Claude session owned by the current profile."""
+    profile_sessions = _load_profile_sessions(profile_dir)
+    if profile_sessions:
+        return profile_sessions[0].session_id
+    return None
 
 
 def _ask_session_action(*, allow_list: bool) -> str:
     """Ask whether to resume, start new, or optionally list saved sessions."""
     if not sys.stdin.isatty():
         return "resume"
-    options = "Continue, start new, or list sessions? \\[C/n/l]: " if allow_list else "Continue or start new? \\[C/n]: "
+    options = (
+        "Continue, start new, or list sessions? \\[C/n/l]: "
+        if allow_list
+        else "Continue or start new? \\[C/n]: "
+    )
     console.print("[bold]Previous session found.[/bold] " + options, end="")
     value = sys.stdin.readline().strip().lower()
     if not value or value in ("c", "continue", "y", "yes"):
@@ -172,13 +321,21 @@ def _ask_session_action(*, allow_list: bool) -> str:
 
 def _select_saved_session(
     *,
+    profile_dir: Path,
     cwd: Path,
     fetch_sessions: Callable[[Path], Sequence[object]],
     title: str,
     empty_message: str,
 ) -> str | None:
-    """List saved sessions for the current cwd and let the user choose one."""
-    sessions = list(fetch_sessions(cwd))[:CODEX_LIST_LIMIT]
+    """List profile-owned sessions for the current cwd and let the user choose one."""
+    sessions: list[ProfileSessionEntry] = _load_profile_sessions(profile_dir)
+    if not sessions:
+        sessions = [
+            entry
+            for session in fetch_sessions(cwd)
+            if (entry := _to_profile_session_entry(session)) is not None
+        ]
+    sessions = sessions[:CODEX_LIST_LIMIT]
     if not sessions:
         console.print(f"[yellow]{empty_message}[/yellow]")
         return None
@@ -205,9 +362,10 @@ def _select_saved_session(
     return sessions[index].session_id
 
 
-def _select_codex_session(cwd: Path) -> str | None:
+def _select_codex_session(profile_dir: Path, cwd: Path) -> str | None:
     """List saved Codex sessions for the current cwd and let the user choose one."""
     return _select_saved_session(
+        profile_dir=profile_dir,
         cwd=cwd,
         fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
         title="Saved Codex sessions",
@@ -215,9 +373,10 @@ def _select_codex_session(cwd: Path) -> str | None:
     )
 
 
-def _select_claude_session(cwd: Path) -> str | None:
+def _select_claude_session(profile_dir: Path, cwd: Path) -> str | None:
     """List saved Claude sessions for the current cwd and let the user choose one."""
     return _select_saved_session(
+        profile_dir=profile_dir,
         cwd=cwd,
         fetch_sessions=lambda current_cwd: ClaudeRunner().list_sessions(cwd=current_cwd),
         title="Saved Claude sessions",
@@ -229,7 +388,8 @@ def _resume_with_saved_session(
     *,
     profile_dir: Path,
     saved_sid: str,
-    select_session: Callable[[Path], str | None] | None,
+    select_session: Callable[[Path, Path], str | None] | None,
+    fetch_sessions: Callable[[Path], Sequence[object]] | None,
     cwd: Path,
 ) -> tuple[str | None, str | None]:
     """Resolve whether to resume an existing session or start a new one."""
@@ -238,9 +398,15 @@ def _resume_with_saved_session(
         console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
         return saved_sid, None
     if action == "list" and select_session is not None:
-        selected_sid = select_session(cwd)
+        selected_sid = select_session(profile_dir, cwd)
         if selected_sid:
             _save_session_id(profile_dir, selected_sid)
+            _upsert_profile_session(
+                profile_dir,
+                selected_sid,
+                cwd=cwd,
+                fetch_sessions=fetch_sessions,
+            )
             console.print(f"  [dim]Resuming session {selected_sid[:8]}...[/dim]")
             return selected_sid, None
     return None, str(uuid.uuid4())
@@ -273,12 +439,13 @@ def launch_session(
     saved_sid = _load_session_id(profile_dir)
     if cli_name == "codex":
         if not saved_sid and not compress:
-            saved_sid = _discover_recent_codex_session_id(cwd)
+            saved_sid = _discover_recent_codex_session_id(profile_dir, cwd)
         if saved_sid and not compress:
             resume_id, session_id = _resume_with_saved_session(
                 profile_dir=profile_dir,
                 saved_sid=saved_sid,
                 select_session=_select_codex_session,
+                fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
                 cwd=cwd,
             )
             if session_id:
@@ -287,12 +454,13 @@ def launch_session(
             _clear_session_id(profile_dir)
     elif cli_name == "claude":
         if not saved_sid and not compress:
-            saved_sid = _discover_claude_session_id(cwd)
+            saved_sid = _discover_claude_session_id(profile_dir, cwd)
         if saved_sid and not compress:
             resume_id, session_id = _resume_with_saved_session(
                 profile_dir=profile_dir,
                 saved_sid=saved_sid,
                 select_session=_select_claude_session,
+                fetch_sessions=lambda current_cwd: ClaudeRunner().list_sessions(cwd=current_cwd),
                 cwd=cwd,
             )
             if session_id:
@@ -387,6 +555,35 @@ def launch_session(
 
     if cli_name == "codex" and not resume_id and result.session_id:
         _save_session_id(profile_dir, result.session_id)
+        _upsert_profile_session(
+            profile_dir,
+            result.session_id,
+            cwd=cwd,
+            fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
+        )
+    elif cli_name == "codex" and resume_id:
+        _save_session_id(profile_dir, resume_id)
+        _upsert_profile_session(
+            profile_dir,
+            resume_id,
+            cwd=cwd,
+            fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
+        )
+    elif cli_name == "claude" and resume_id:
+        _save_session_id(profile_dir, resume_id)
+        _upsert_profile_session(
+            profile_dir,
+            resume_id,
+            cwd=cwd,
+            fetch_sessions=lambda current_cwd: ClaudeRunner().list_sessions(cwd=current_cwd),
+        )
+    elif cli_name == "claude" and session_id:
+        _upsert_profile_session(
+            profile_dir,
+            session_id,
+            cwd=cwd,
+            fetch_sessions=lambda current_cwd: ClaudeRunner().list_sessions(cwd=current_cwd),
+        )
 
     return 0 if result.ok else result.exit_code
 

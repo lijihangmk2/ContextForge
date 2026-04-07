@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.7] - 2026-04-07
+
+### Fixed
+
+- Scoped session recovery to the active profile so `continue` and session lists no longer pull sessions from other profiles in the same project.
+- Added per-profile `sessions.json` tracking to keep Claude and Codex resume behavior aligned with ctxforge profiles.
+
+### Changed
+
+- Lowered the minimum supported Python version to 3.10.
+- Added `tomli` fallback loading and replaced Python 3.11-only `datetime.UTC` usage with 3.10-compatible timezone handling.
+
 ## [1.4.6] - 2026-04-01
 
 ### Fixed

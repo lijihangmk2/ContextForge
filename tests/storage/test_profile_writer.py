@@ -1,7 +1,11 @@
 """Tests for profile_writer."""
 
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
 
 from ctxforge.spec.schema import (
     KeyFilesSection,

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 from pydantic import ValidationError
 
@@ -61,7 +66,7 @@ def _load_toml(path: Path, error_cls: type[Exception]) -> dict[str, Any]:
     """Read and parse a TOML file."""
     try:
         with open(path, "rb") as f:
-            return tomllib.load(f)
+            return cast(dict[str, Any], tomllib.load(f))
     except Exception as e:
         raise error_cls(f"Failed to parse {path}: {e}") from e
 

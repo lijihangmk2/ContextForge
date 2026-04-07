@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ctxforge.exceptions import RunnerError
@@ -48,7 +48,7 @@ class CodexRunner:
         cmd: list[str] = ["codex"]
         if auto_approve:
             cmd.append("--dangerously-bypass-approvals-and-sandbox")
-        started_at = datetime.now(UTC)
+        started_at = datetime.now(timezone.utc)
 
         if resume_id:
             cmd.extend(["resume", resume_id])
@@ -121,7 +121,9 @@ class CodexRunner:
             if since is not None and created_at < since:
                 continue
             try:
-                modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+                modified_at = datetime.fromtimestamp(
+                    path.stat().st_mtime, tz=timezone.utc
+                )
             except OSError:
                 continue
             matches.append(
@@ -150,7 +152,11 @@ class CodexRunner:
             session_id = meta.get("id")
             cwd = meta.get("cwd")
             timestamp = meta.get("timestamp")
-            if not isinstance(session_id, str) or not isinstance(cwd, str) or not isinstance(timestamp, str):
+            if not (
+                isinstance(session_id, str)
+                and isinstance(cwd, str)
+                and isinstance(timestamp, str)
+            ):
                 return None
             return session_id, cwd, datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except (IndexError, OSError, ValueError, json.JSONDecodeError):
@@ -176,10 +182,12 @@ class CodexRunner:
         return ""
 
     @staticmethod
-    def _extract_preview_text(payload: dict) -> str:
+    def _extract_preview_text(payload: dict[str, object]) -> str:
         """Extract the most useful preview text from one session event."""
         event_type = payload.get("type")
-        data = payload.get("payload", {})
+        data = payload.get("payload")
+        if not isinstance(data, dict):
+            return ""
 
         if event_type == "event_msg":
             if data.get("type") == "task_complete":

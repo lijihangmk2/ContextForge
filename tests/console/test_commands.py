@@ -1,16 +1,17 @@
 """Integration tests for CLI commands."""
 
 import io
-from datetime import UTC, datetime
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ctxforge.spec.schema import ProfileCliSection
-from ctxforge.storage.profile_writer import write_profile
 from typer.testing import CliRunner
 
 from ctxforge.console.application import app
 from ctxforge.core.profile import ProfileManager
+from ctxforge.spec.schema import ProfileCliSection
+from ctxforge.storage.profile_writer import write_profile
 
 runner = CliRunner()
 
@@ -239,7 +240,7 @@ class TestLaunchSession:
         call_args = mock_run.call_args[0][0]
         assert call_args[:3] == ["claude", "--resume", "real-claude-session"]
 
-    def test_launch_session_claude_discovers_recent_session_when_session_file_missing(
+    def test_launch_session_claude_starts_new_session_when_profile_has_no_owned_session(
         self, ctxforge_project: Path,
     ):
         from ctxforge.console.commands.run import launch_session
@@ -251,8 +252,45 @@ class TestLaunchSession:
         with (
             patch(
                 "ctxforge.console.commands.run._discover_claude_session_id",
-                return_value="recent-claude-session",
+                return_value=None,
             ),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[0] == "claude"
+        assert "--resume" not in call_args
+        assert "--session-id" in call_args
+
+    def test_launch_session_claude_ignores_stale_session_file_not_owned_by_profile(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile_dir = pm.profile_path("default").parent
+        (profile_dir / ".session").write_text("foreign-claude-session", encoding="utf-8")
+        (profile_dir / "sessions.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "session_id": "owned-claude-session",
+                        "cwd": str(ctxforge_project),
+                        "modified_at": "2026-04-01T01:00:00+00:00",
+                        "preview": "owned profile session",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+
+        with (
             patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
             patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
         ):
@@ -260,7 +298,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["claude", "--resume", "recent-claude-session"]
+        assert call_args[:3] == ["claude", "--resume", "owned-claude-session"]
 
     def test_launch_session_claude_list_sessions_selects_choice(
         self, ctxforge_project: Path,
@@ -298,20 +336,25 @@ class TestLaunchSession:
             ClaudeSessionInfo(
                 session_id="picked-claude-session",
                 cwd="/repo",
-                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=timezone.utc),
                 path=Path("/tmp/session.jsonl"),
                 preview="Claude 最后一条用户可识别的消息预览",
             )
         ]
 
+        profile_dir = Path("/tmp/profile")
         stdin = io.StringIO("1\n")
         with (
-            patch("ctxforge.console.commands.run.ClaudeRunner.list_sessions", return_value=sessions),
+            patch(
+                "ctxforge.console.commands.run.ClaudeRunner.list_sessions",
+                return_value=sessions,
+            ),
+            patch("ctxforge.console.commands.run._load_profile_sessions", return_value=[]),
             patch("sys.stdin", stdin),
             patch("sys.stdout.isatty", return_value=True),
             patch("ctxforge.console.commands.run.console.print") as mock_print,
         ):
-            selected = _select_claude_session(Path("/repo"))
+            selected = _select_claude_session(profile_dir, Path("/repo"))
 
         assert selected == "picked-claude-session"
         rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
@@ -344,7 +387,7 @@ class TestLaunchSession:
         assert exit_code == 0
         assert session_file.read_text(encoding="utf-8") == "real-codex-session"
 
-    def test_launch_session_codex_discovers_recent_session_when_session_file_missing(
+    def test_launch_session_codex_starts_new_session_when_profile_has_no_owned_session(
         self, ctxforge_project: Path,
     ):
         from ctxforge.console.commands.run import launch_session
@@ -362,8 +405,48 @@ class TestLaunchSession:
         with (
             patch(
                 "ctxforge.console.commands.run._discover_recent_codex_session_id",
-                return_value="recent-codex-session",
+                return_value=None,
             ),
+            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[0] == "codex"
+        assert "resume" not in call_args
+
+    def test_launch_session_codex_ignores_stale_session_file_not_owned_by_profile(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+        profile_dir = pm.profile_path("default").parent
+        (profile_dir / ".session").write_text("foreign-session", encoding="utf-8")
+        (profile_dir / "sessions.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "session_id": "owned-codex-session",
+                        "cwd": str(ctxforge_project),
+                        "modified_at": "2026-04-01T01:00:00+00:00",
+                        "preview": "owned profile session",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+
+        with (
             patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
             patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
         ):
@@ -371,7 +454,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "recent-codex-session"]
+        assert call_args[:3] == ["codex", "resume", "owned-codex-session"]
 
     def test_launch_session_codex_list_sessions_selects_choice(
         self, ctxforge_project: Path,
@@ -416,25 +499,57 @@ class TestLaunchSession:
             CodexSessionInfo(
                 session_id="picked-codex-session",
                 cwd="/repo",
-                created_at=datetime(2026, 4, 1, 0, 0, tzinfo=UTC),
-                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
+                created_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=timezone.utc),
                 path=Path("/tmp/session.jsonl"),
                 preview="最后一条用户可识别的消息预览",
             )
         ]
 
+        profile_dir = Path("/tmp/profile")
         stdin = io.StringIO("1\n")
         with (
             patch("ctxforge.console.commands.run.CodexRunner.list_sessions", return_value=sessions),
+            patch("ctxforge.console.commands.run._load_profile_sessions", return_value=[]),
             patch("sys.stdin", stdin),
             patch("sys.stdout.isatty", return_value=True),
             patch("ctxforge.console.commands.run.console.print") as mock_print,
         ):
-            selected = _select_codex_session(Path("/repo"))
+            selected = _select_codex_session(profile_dir, Path("/repo"))
 
         assert selected == "picked-codex-session"
         rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
         assert "最后一条用户可识别的消息预览" in rendered
+
+    def test_select_codex_session_prefers_profile_index(self, ctxforge_project: Path):
+        from ctxforge.console.commands.run import _select_codex_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile_dir = pm.profile_path("default").parent
+        (profile_dir / "sessions.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "session_id": "profile-owned-session",
+                        "cwd": str(ctxforge_project),
+                        "modified_at": "2026-04-01T01:00:00+00:00",
+                        "preview": "profile scoped preview",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        stdin = io.StringIO("1\n")
+        with (
+            patch("ctxforge.console.commands.run.CodexRunner.list_sessions") as mock_list_sessions,
+            patch("sys.stdin", stdin),
+            patch("sys.stdout.isatty", return_value=True),
+        ):
+            selected = _select_codex_session(profile_dir, ctxforge_project)
+
+        assert selected == "profile-owned-session"
+        mock_list_sessions.assert_not_called()
 
 
 class TestRunCommand:
@@ -556,7 +671,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.6" in result.output
+        assert "1.4.7" in result.output
 
 
 class TestSetProcTitle:

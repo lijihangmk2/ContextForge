@@ -10,7 +10,7 @@ Define a profile, select key files, then run your AI CLI with project context.
 pip install ctxforge
 ```
 
-Requires Python >= 3.11 and at least one AI CLI installed (for example [Claude Code](https://docs.anthropic.com/en/docs/claude-code)).
+Requires Python >= 3.10 and at least one AI CLI installed (for example [Claude Code](https://docs.anthropic.com/en/docs/claude-code)).
 
 ## Quick Start (2 steps)
 

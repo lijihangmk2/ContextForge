@@ -1,7 +1,7 @@
 """Tests for CodexRunner."""
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -132,8 +132,8 @@ class TestCodexRunner:
             encoding="utf-8",
         )
 
-        older_time = datetime(2026, 4, 1, 1, 0, tzinfo=UTC).timestamp()
-        newer_time = datetime(2026, 4, 1, 2, 0, tzinfo=UTC).timestamp()
+        older_time = datetime(2026, 4, 1, 1, 0, tzinfo=timezone.utc).timestamp()
+        newer_time = datetime(2026, 4, 1, 2, 0, tzinfo=timezone.utc).timestamp()
         older.touch()
         newer.touch()
         older.chmod(0o644)
@@ -174,7 +174,9 @@ class TestCodexRunner:
                             "type": "event_msg",
                             "payload": {
                                 "type": "task_complete",
-                                "last_agent_message": "这是最后一条消息，用于展示给用户确认恢复哪个 session。",
+                                "last_agent_message": (
+                                    "这是最后一条消息，用于展示给用户确认恢复哪个 session。"
+                                ),
                             },
                         }
                     ),

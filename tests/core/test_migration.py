@@ -1,7 +1,11 @@
 """Tests for schema migration."""
 
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
 
 from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.spec.schema import (

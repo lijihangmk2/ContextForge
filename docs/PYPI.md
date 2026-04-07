@@ -10,7 +10,7 @@ Define AI work profiles, select key files, and launch your AI CLI with project c
 pip install ctxforge
 ```
 
-Requires Python >= 3.11 and at least one AI CLI (e.g. Claude Code, Codex).
+Requires Python >= 3.10 and at least one AI CLI (e.g. Claude Code, Codex).
 
 ## Usage
 
