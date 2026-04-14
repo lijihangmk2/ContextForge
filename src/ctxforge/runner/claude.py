@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult
@@ -34,6 +35,7 @@ class ClaudeRunner:
         mcp_config: Path | None = None,
         session_id: str | None = None,
         resume_id: str | None = None,
+        on_session_started: Callable[[str], None] | None = None,
     ) -> RunResult:
         """Start an interactive ``claude`` session.
 

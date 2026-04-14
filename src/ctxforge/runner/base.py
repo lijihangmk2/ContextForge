@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 @dataclass
@@ -35,6 +35,7 @@ class CliRunner(Protocol):
         mcp_config: Path | None = None,
         session_id: str | None = None,
         resume_id: str | None = None,
+        on_session_started: Callable[[str], None] | None = None,
     ) -> RunResult:
         """Execute the AI CLI with the given system prompt."""
         ...

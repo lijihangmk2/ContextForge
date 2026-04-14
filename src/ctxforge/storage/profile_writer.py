@@ -18,6 +18,7 @@ def write_profile(path: Path, config: ProfileConfig) -> None:
         config: Validated ProfileConfig instance.
     """
     data = _clean_empty(config.model_dump(exclude_none=True))
+    data["key_files"] = {"paths": list(config.key_files.paths)}
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
         tomli_w.dump(data, f)

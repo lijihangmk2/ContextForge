@@ -193,6 +193,59 @@ class TestLaunchSession:
         full_cmd = " ".join(call_args)
         assert "compress" in full_cmd.lower()
 
+    def test_launch_session_normalizes_profile_when_key_files_section_missing(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        profile_path = (
+            ctxforge_project / ".ctxforge" / "profiles" / "default" / "profile.toml"
+        )
+        profile_path.write_text(
+            '\n'.join(
+                [
+                    "schema_version = 6",
+                    "",
+                    "[profile]",
+                    'name = "default"',
+                    'description = "Default profile"',
+                    "",
+                    "[role]",
+                    'prompt = "You are a helpful assistant."',
+                    "",
+                    "[work_record.files]",
+                    '"journal.md" = "work journal — completed tasks, in-progress, TODOs"',
+                    '"pitfalls.md" = "pitfalls — gotchas, lessons learned, warnings"',
+                    '"usermemo.md" = "user memo — persistent notes and instructions from the user"',
+                    "",
+                    "[injection]",
+                    'strategy = "simple"',
+                    'order = "role_first"',
+                    "greeting = true",
+                    "",
+                    "[cli]",
+                    'name = "claude"',
+                    "auto_approve = false",
+                    "",
+                    "[budget]",
+                    "max_tokens = 24000",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        profile_text = profile_path.read_text(encoding="utf-8")
+        assert "[key_files]" in profile_text
+        assert "paths = []" in profile_text
+
     def test_launch_session_codex_resume_uses_saved_session(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import launch_session
 
@@ -207,10 +260,12 @@ class TestLaunchSession:
         mock_result.returncode = 0
         mock_result.ok = True
         mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
 
         with (
             patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
         ):
             exit_code = launch_session(ctxforge_project, "default")
 
@@ -380,7 +435,15 @@ class TestLaunchSession:
             patch("ctxforge.console.commands.run.get_runner") as mock_get_runner,
         ):
             mock_runner = MagicMock()
-            mock_runner.run.return_value = mock_result
+
+            def run_side_effect(*args, **kwargs):
+                callback = kwargs.get("on_session_started")
+                assert callable(callback)
+                callback("real-codex-session")
+                assert session_file.read_text(encoding="utf-8") == "real-codex-session"
+                return mock_result
+
+            mock_runner.run.side_effect = run_side_effect
             mock_get_runner.return_value = mock_runner
             exit_code = launch_session(ctxforge_project, "default")
 
@@ -401,13 +464,17 @@ class TestLaunchSession:
         mock_result.returncode = 0
         mock_result.ok = True
         mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
         with (
             patch(
                 "ctxforge.console.commands.run._discover_recent_codex_session_id",
                 return_value=None,
             ),
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
+            patch("ctxforge.runner.codex.CodexRunner.find_latest_session_id", return_value=None),
         ):
             exit_code = launch_session(ctxforge_project, "default")
 
@@ -445,10 +512,12 @@ class TestLaunchSession:
         mock_result.returncode = 0
         mock_result.ok = True
         mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
 
         with (
             patch("ctxforge.console.commands.run._ask_session_action", return_value="resume"),
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
         ):
             exit_code = launch_session(ctxforge_project, "default")
 
@@ -470,6 +539,8 @@ class TestLaunchSession:
         mock_result.returncode = 0
         mock_result.ok = True
         mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
 
         with (
             patch(
@@ -481,7 +552,7 @@ class TestLaunchSession:
                 "ctxforge.console.commands.run._select_codex_session",
                 return_value="picked-codex-session",
             ),
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run,
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
         ):
             exit_code = launch_session(ctxforge_project, "default")
 
@@ -490,6 +561,43 @@ class TestLaunchSession:
         assert call_args[:3] == ["codex", "resume", "picked-codex-session"]
         session_file = pm.profile_path("default").parent / ".session"
         assert session_file.read_text(encoding="utf-8") == "picked-codex-session"
+
+    def test_launch_session_codex_list_all_sessions_selects_choice(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
+
+        with (
+            patch(
+                "ctxforge.console.commands.run._discover_recent_codex_session_id",
+                return_value="recent-codex-session",
+            ),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="list_all"),
+            patch(
+                "ctxforge.console.commands.run._select_codex_global_session",
+                return_value="picked-global-codex-session",
+            ),
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["codex", "resume", "picked-global-codex-session"]
+        session_file = pm.profile_path("default").parent / ".session"
+        assert session_file.read_text(encoding="utf-8") == "picked-global-codex-session"
 
     def test_select_codex_session_shows_preview(self):
         from ctxforge.console.commands.run import _select_codex_session
@@ -520,6 +628,94 @@ class TestLaunchSession:
         assert selected == "picked-codex-session"
         rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
         assert "最后一条用户可识别的消息预览" in rendered
+
+    def test_select_codex_global_session_lists_all_sessions(self):
+        from ctxforge.console.commands.run import _select_codex_global_session
+        from ctxforge.runner.codex import CodexSessionInfo
+
+        sessions = [
+            CodexSessionInfo(
+                session_id="global-codex-session",
+                cwd="/other-repo",
+                created_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=timezone.utc),
+                path=Path("/tmp/session.jsonl"),
+                preview="来自其他项目的全局 session 预览",
+            )
+        ]
+
+        profile_dir = Path("/tmp/profile")
+        stdin = io.StringIO("1\n")
+        with (
+            patch(
+                "ctxforge.console.commands.run.CodexRunner.list_sessions",
+                return_value=sessions,
+            ) as mock_list_sessions,
+            patch("ctxforge.console.commands.run._load_profile_sessions", return_value=[]),
+            patch("sys.stdin", stdin),
+            patch("sys.stdout.isatty", return_value=True),
+        ):
+            selected = _select_codex_global_session(profile_dir, Path("/repo"))
+
+        assert selected == "global-codex-session"
+        mock_list_sessions.assert_called_once_with(cwd=None)
+
+    def test_select_codex_global_session_ignores_profile_index(self, ctxforge_project: Path):
+        from ctxforge.console.commands.run import _select_codex_global_session
+        from ctxforge.runner.codex import CodexSessionInfo
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile_dir = pm.profile_path("default").parent
+        (profile_dir / "sessions.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "session_id": "profile-owned-session",
+                        "cwd": str(ctxforge_project),
+                        "modified_at": "2026-04-01T01:00:00+00:00",
+                        "preview": "profile scoped preview",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        sessions = [
+            CodexSessionInfo(
+                session_id="global-codex-session",
+                cwd="/other-repo",
+                created_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+                modified_at=datetime(2026, 4, 1, 1, 0, tzinfo=timezone.utc),
+                path=Path("/tmp/session.jsonl"),
+                preview="来自其他项目的全局 session 预览",
+            )
+        ]
+
+        stdin = io.StringIO("1\n")
+        with (
+            patch(
+                "ctxforge.console.commands.run.CodexRunner.list_sessions",
+                return_value=sessions,
+            ) as mock_list_sessions,
+            patch("sys.stdin", stdin),
+            patch("sys.stdout.isatty", return_value=True),
+        ):
+            selected = _select_codex_global_session(profile_dir, ctxforge_project)
+
+        assert selected == "global-codex-session"
+        mock_list_sessions.assert_called_once_with(cwd=None)
+
+    def test_ask_session_action_supports_list_all(self):
+        from ctxforge.console.commands.run import _ask_session_action
+
+        stdin = io.StringIO("la\n")
+        with (
+            patch("sys.stdin", stdin),
+            patch("sys.stdin.isatty", return_value=True),
+        ):
+            action = _ask_session_action(allow_list=True, allow_list_all=True)
+
+        assert action == "list_all"
 
     def test_select_codex_session_prefers_profile_index(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import _select_codex_session

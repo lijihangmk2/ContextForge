@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult
@@ -39,6 +41,7 @@ class CodexRunner:
         mcp_config: Path | None = None,
         session_id: str | None = None,
         resume_id: str | None = None,
+        on_session_started: Callable[[str], None] | None = None,
     ) -> RunResult:
         """Start an interactive ``codex`` session.
 
@@ -58,7 +61,7 @@ class CodexRunner:
                 cmd.append(combined)
 
         try:
-            proc = subprocess.run(cmd)
+            proc = subprocess.Popen(cmd)
         except FileNotFoundError as e:
             raise RunnerError("codex CLI not found on PATH") from e
         except Exception as e:
@@ -66,10 +69,23 @@ class CodexRunner:
 
         discovered_session_id = None
         if not resume_id:
+            discovered_session_id = self._wait_for_session_id(
+                proc,
+                cwd=Path.cwd(),
+                since=started_at,
+            )
+            if discovered_session_id and on_session_started is not None:
+                on_session_started(discovered_session_id)
+
+        return_code = proc.wait()
+
+        if not resume_id and discovered_session_id is None:
             discovered_session_id = self.find_latest_session_id(Path.cwd(), since=started_at)
+            if discovered_session_id and on_session_started is not None:
+                on_session_started(discovered_session_id)
 
         return RunResult(
-            exit_code=proc.returncode,
+            exit_code=return_code,
             stdout="",
             stderr="",
             session_id=discovered_session_id,
@@ -100,6 +116,24 @@ class CodexRunner:
         """Find the newest Codex session ID for *cwd*, optionally filtered by time."""
         sessions = self.list_sessions(cwd=cwd, since=since)
         return sessions[0].session_id if sessions else None
+
+    def _wait_for_session_id(
+        self,
+        proc: subprocess.Popen[object],
+        *,
+        cwd: Path,
+        since: datetime,
+        poll_interval: float = 0.2,
+        max_wait: float = 15.0,
+    ) -> str | None:
+        """Poll for a newly created session while the interactive CLI is starting."""
+        deadline = time.monotonic() + max_wait
+        while proc.poll() is None and time.monotonic() < deadline:
+            session_id = self.find_latest_session_id(cwd, since=since)
+            if session_id:
+                return session_id
+            time.sleep(poll_interval)
+        return None
 
     def list_sessions(
         self, *, cwd: Path | None = None, since: datetime | None = None,

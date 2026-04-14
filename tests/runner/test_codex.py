@@ -14,10 +14,11 @@ from ctxforge.runner.codex import CodexRunner
 class TestCodexRunner:
     def test_run_success(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context")
             mock_run.assert_called_once_with(
                 ["codex", "system context"],
@@ -28,10 +29,11 @@ class TestCodexRunner:
 
     def test_run_with_initial_prompt(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", "hello")
             mock_run.assert_called_once_with(
                 ["codex", "system context\n\nhello"],
@@ -40,10 +42,11 @@ class TestCodexRunner:
 
     def test_run_auto_approve(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", auto_approve=True)
             mock_run.assert_called_once_with(
                 ["codex", "--dangerously-bypass-approvals-and-sandbox", "system context"],
@@ -52,20 +55,21 @@ class TestCodexRunner:
 
     def test_run_empty_system_prompt(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("")
             mock_run.assert_called_once_with(["codex"])
         assert result.ok
 
     def test_run_resume_session(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", "hello", resume_id="abc-123")
             mock_run.assert_called_once_with(
                 ["codex", "resume", "abc-123"],
@@ -74,11 +78,12 @@ class TestCodexRunner:
 
     def test_run_discovers_session_id(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
 
         with (
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result),
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc),
             patch.object(runner, "find_latest_session_id", return_value="sid-123") as mock_find,
         ):
             result = runner.run("system context")
@@ -87,16 +92,32 @@ class TestCodexRunner:
 
     def test_run_resume_does_not_discover_session_id(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 0
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
 
         with (
-            patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result),
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc),
             patch.object(runner, "find_latest_session_id") as mock_find,
         ):
             result = runner.run("system context", resume_id="abc-123")
         mock_find.assert_not_called()
         assert result.session_id is None
+
+    def test_run_calls_on_session_started_when_session_is_discovered(self):
+        runner = CodexRunner()
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 0]
+        mock_proc.wait.return_value = 0
+        callback = MagicMock()
+
+        with (
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc),
+            patch.object(runner, "find_latest_session_id", return_value="sid-123"),
+        ):
+            result = runner.run("system context", on_session_started=callback)
+
+        callback.assert_called_once_with("sid-123")
+        assert result.session_id == "sid-123"
 
     def test_list_sessions_sorted_by_modified_time(self, tmp_path: Path):
         runner = CodexRunner()
@@ -193,17 +214,18 @@ class TestCodexRunner:
 
     def test_run_failure(self):
         runner = CodexRunner()
-        mock_result = MagicMock()
-        mock_result.returncode = 1
+        mock_proc = MagicMock()
+        mock_proc.poll.side_effect = [None, 1]
+        mock_proc.wait.return_value = 1
 
-        with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result):
+        with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc):
             result = runner.run("system context")
         assert not result.ok
         assert result.exit_code == 1
 
     def test_run_not_found(self):
         runner = CodexRunner()
-        with patch("ctxforge.runner.codex.subprocess.run", side_effect=FileNotFoundError):
+        with patch("ctxforge.runner.codex.subprocess.Popen", side_effect=FileNotFoundError):
             with pytest.raises(RunnerError, match="not found"):
                 runner.run("test")
 

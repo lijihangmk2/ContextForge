@@ -14,6 +14,11 @@ import typer
 from rich.console import Console
 from setproctitle import setproctitle
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib  # type: ignore[import-not-found]
+
 from ctxforge.core.injection import SimpleInjection
 from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.core.profile import ProfileManager
@@ -26,6 +31,7 @@ from ctxforge.runner.codex import CodexRunner
 from ctxforge.runner.registry import get_runner
 from ctxforge.spec.schema import ProfileConfig
 from ctxforge.storage.commands_writer import write_commands
+from ctxforge.storage.profile_writer import write_profile
 
 console = Console()
 
@@ -109,7 +115,24 @@ def _ensure_migrated(
             project.config,
             pm.profile_path(profile_name),
         )
+    elif _needs_profile_normalization(pm.profile_path(profile_name)):
+        write_profile(pm.profile_path(profile_name), profile_config)
     return profile_config
+
+
+def _needs_profile_normalization(profile_path: Path) -> bool:
+    """Check whether a profile.toml is missing required normalized sections."""
+    try:
+        with open(profile_path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception:
+        return False
+
+    key_files = data.get("key_files")
+    if not isinstance(key_files, dict):
+        return True
+    paths = key_files.get("paths")
+    return not isinstance(paths, list)
 
 
 def _ensure_context_files(profile_dir: Path, profile_config: ProfileConfig) -> None:
@@ -301,19 +324,22 @@ def _discover_claude_session_id(profile_dir: Path, cwd: Path) -> str | None:
     return None
 
 
-def _ask_session_action(*, allow_list: bool) -> str:
+def _ask_session_action(*, allow_list: bool, allow_list_all: bool = False) -> str:
     """Ask whether to resume, start new, or optionally list saved sessions."""
     if not sys.stdin.isatty():
         return "resume"
-    options = (
-        "Continue, start new, or list sessions? \\[C/n/l]: "
-        if allow_list
-        else "Continue or start new? \\[C/n]: "
-    )
+    if allow_list_all:
+        options = "Continue, start new, list project sessions, or list all? \\[C/n/l/la]: "
+    elif allow_list:
+        options = "Continue, start new, or list sessions? \\[C/n/l]: "
+    else:
+        options = "Continue or start new? \\[C/n]: "
     console.print("[bold]Previous session found.[/bold] " + options, end="")
     value = sys.stdin.readline().strip().lower()
     if not value or value in ("c", "continue", "y", "yes"):
         return "resume"
+    if allow_list_all and value in ("la", "list-all", "list all"):
+        return "list_all"
     if allow_list and value in ("l", "list"):
         return "list"
     return "new"
@@ -326,9 +352,12 @@ def _select_saved_session(
     fetch_sessions: Callable[[Path], Sequence[object]],
     title: str,
     empty_message: str,
+    prefer_profile_index: bool = True,
 ) -> str | None:
     """List profile-owned sessions for the current cwd and let the user choose one."""
-    sessions: list[ProfileSessionEntry] = _load_profile_sessions(profile_dir)
+    sessions: list[ProfileSessionEntry] = []
+    if prefer_profile_index:
+        sessions = _load_profile_sessions(profile_dir)
     if not sessions:
         sessions = [
             entry
@@ -370,6 +399,19 @@ def _select_codex_session(profile_dir: Path, cwd: Path) -> str | None:
         fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
         title="Saved Codex sessions",
         empty_message="No saved Codex sessions found for this project.",
+        prefer_profile_index=True,
+    )
+
+
+def _select_codex_global_session(profile_dir: Path, cwd: Path) -> str | None:
+    """List all discovered Codex sessions and let the user choose one."""
+    return _select_saved_session(
+        profile_dir=profile_dir,
+        cwd=cwd,
+        fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=None),
+        title="All Codex sessions",
+        empty_message="No Codex sessions found.",
+        prefer_profile_index=False,
     )
 
 
@@ -389,16 +431,32 @@ def _resume_with_saved_session(
     profile_dir: Path,
     saved_sid: str,
     select_session: Callable[[Path, Path], str | None] | None,
+    select_all_sessions: Callable[[Path, Path], str | None] | None = None,
     fetch_sessions: Callable[[Path], Sequence[object]] | None,
     cwd: Path,
 ) -> tuple[str | None, str | None]:
     """Resolve whether to resume an existing session or start a new one."""
-    action = _ask_session_action(allow_list=select_session is not None)
+    action = _ask_session_action(
+        allow_list=select_session is not None,
+        allow_list_all=select_all_sessions is not None,
+    )
     if action == "resume":
         console.print(f"  [dim]Resuming session {saved_sid[:8]}...[/dim]")
         return saved_sid, None
     if action == "list" and select_session is not None:
         selected_sid = select_session(profile_dir, cwd)
+        if selected_sid:
+            _save_session_id(profile_dir, selected_sid)
+            _upsert_profile_session(
+                profile_dir,
+                selected_sid,
+                cwd=cwd,
+                fetch_sessions=fetch_sessions,
+            )
+            console.print(f"  [dim]Resuming session {selected_sid[:8]}...[/dim]")
+            return selected_sid, None
+    if action == "list_all" and select_all_sessions is not None:
+        selected_sid = select_all_sessions(profile_dir, cwd)
         if selected_sid:
             _save_session_id(profile_dir, selected_sid)
             _upsert_profile_session(
@@ -445,6 +503,7 @@ def launch_session(
                 profile_dir=profile_dir,
                 saved_sid=saved_sid,
                 select_session=_select_codex_session,
+                select_all_sessions=_select_codex_global_session,
                 fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
                 cwd=cwd,
             )
@@ -540,6 +599,18 @@ def launch_session(
         return 1
 
     auto_approve = profile_config.cli.auto_approve
+    on_session_started = None
+    if cli_name == "codex" and not resume_id:
+        def _record_codex_session_start(started_session_id: str) -> None:
+            _save_session_id(profile_dir, started_session_id)
+            _upsert_profile_session(
+                profile_dir,
+                started_session_id,
+                cwd=cwd,
+                fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(cwd=current_cwd),
+            )
+
+        on_session_started = _record_codex_session_start
 
     try:
         result = runner.run(
@@ -548,6 +619,7 @@ def launch_session(
             mcp_config=mcp_config_path,
             session_id=session_id,
             resume_id=resume_id,
+            on_session_started=on_session_started,
         )
     except CForgeError as e:
         console.print(f"[red]Error:[/red] {e}")

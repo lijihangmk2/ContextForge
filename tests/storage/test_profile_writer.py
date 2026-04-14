@@ -57,4 +57,5 @@ class TestWriteProfile:
         with open(path, "rb") as f:
             data = tomllib.load(f)
         assert data["profile"]["name"] == "minimal"
+        assert data["key_files"]["paths"] == []
         assert "enhancers" not in data  # empty list omitted
