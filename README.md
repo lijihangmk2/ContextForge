@@ -58,6 +58,38 @@ ctxforge tool disable puppeteer -p rev  # Disable for a profile
 
 Other subcommands: `setup`, `check`, `enable`, `remove`. Run `ctxforge tool --help` for details.
 
+## MemPalace
+
+ctxforge can enable project-level [MemPalace](https://github.com/milla-jovovich/mempalace) integration.
+
+MemPalace is a separate dependency. Install it first:
+
+```bash
+pip install mempalace
+```
+
+Then enable it for the project:
+
+```bash
+ctxforge mempalace enable
+ctxforge mempalace status
+ctxforge mempalace disable
+ctxforge mempalace set interval 5
+```
+
+Behavior:
+
+- Enable checks that `mempalace` is actually installed and runnable. If not, enable fails.
+- `ctxforge mempalace status` also reports whether the runtime is currently available.
+- Each profile still gets its own memory namespace and wing inside one project-level palace.
+- `ctxforge run` preloads relevant memory for new sessions.
+- When using Claude, ctxforge also installs profile-scoped memory hooks into `.claude/settings.local.json` for checkpoint and pre-compact saves.
+- Default behavior is to save after every user message (`checkpoint_interval = 1`).
+- You can change that with `ctxforge mempalace set interval N` after MemPalace is enabled.
+- Key files and work-record files still take priority over recalled memory.
+
+If MemPalace is enabled in the project but `mempalace` is not installed, `ctxforge run` will refuse to start.
+
 ## Minimal Example
 
 ```bash

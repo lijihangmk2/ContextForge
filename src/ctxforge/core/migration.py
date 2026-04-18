@@ -12,6 +12,7 @@ from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
     CURRENT_PROJECT_VERSION,
     DEFAULT_WORK_RECORD,
+    MemorySection,
     ProfileCliSection,
     ProfileConfig,
     ProjectConfig,
@@ -161,12 +162,29 @@ def _migrate_v5_to_v6(
         console.print(f"  {memo_key} already present")
 
 
+def _migrate_v6_to_v7(
+    config: ProfileConfig,
+    project_config: ProjectConfig,
+) -> None:
+    """v6 → v7: add memory section (disabled by default)."""
+    console.print(
+        f"\n[bold]Upgrading profile '{config.profile.name}' "
+        f"(v6 → v7)[/bold]"
+    )
+    if getattr(config, "memory", None) is None:
+        config.memory = MemorySection()
+        console.print("  Adding memory section (disabled)")
+    else:
+        console.print("  Memory section already present")
+
+
 _MIGRATIONS: list[tuple[int, MigrateFn]] = [
     (2, _migrate_v1_to_v2),
     (3, _migrate_v2_to_v3),
     (4, _migrate_v3_to_v4),
     (5, _migrate_v4_to_v5),
     (6, _migrate_v5_to_v6),
+    (7, _migrate_v6_to_v7),
 ]
 
 
@@ -234,6 +252,8 @@ def _apply_defaults(
         memo_key = "usermemo.md"
         if memo_key not in config.work_record.files:
             config.work_record.files[memo_key] = DEFAULT_WORK_RECORD[memo_key]
+    elif target == 7:
+        config.memory = MemorySection()
 
 
 # ── Project migration ───────────────────────────────────────────────────────

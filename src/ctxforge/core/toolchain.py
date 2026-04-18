@@ -62,7 +62,10 @@ def resolve_tools(
 
 
 def build_mcp_config(
-    profile: ProfileConfig, project: ProjectConfig,
+    profile: ProfileConfig,
+    project: ProjectConfig,
+    *,
+    extra_servers: dict[str, dict[str, object]] | None = None,
 ) -> Path | None:
     """Generate a temporary MCP config JSON for available tools.
 
@@ -79,6 +82,9 @@ def build_mcp_config(
         if tool.args:
             server["args"] = tool.args
         servers[name] = server
+
+    if extra_servers:
+        servers.update(extra_servers)
 
     if not servers:
         return None

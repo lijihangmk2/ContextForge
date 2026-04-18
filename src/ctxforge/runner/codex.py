@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult
@@ -119,7 +119,7 @@ class CodexRunner:
 
     def _wait_for_session_id(
         self,
-        proc: subprocess.Popen[object],
+        proc: subprocess.Popen[bytes],
         *,
         cwd: Path,
         since: datetime,

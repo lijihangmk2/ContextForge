@@ -12,6 +12,7 @@ from ctxforge.spec.schema import (
     CURRENT_PROFILE_VERSION,
     CliConfig,
     DefaultsConfig,
+    MemorySection,
     ProfileConfig,
     ProfileSection,
     ProjectConfig,
@@ -118,3 +119,23 @@ class TestMigrateProfile:
         assert result.schema_version == CURRENT_PROFILE_VERSION
         assert result.cli.name is None
         assert result.cli.auto_approve is False
+        assert result.memory == MemorySection()
+
+    def test_v6_to_v7_adds_memory_defaults(self, tmp_path: Path):
+        profile_path = tmp_path / "profile.toml"
+        config = ProfileConfig(
+            schema_version=6,
+            profile=ProfileSection(name="legacy"),
+            role=RoleSection(prompt="You are helpful."),
+        )
+        write_profile(profile_path, config)
+        project_config = _make_project_config()
+
+        result = migrate_profile(config, project_config, profile_path)
+
+        assert result.schema_version == CURRENT_PROFILE_VERSION
+        assert result.memory == MemorySection()
+        with open(profile_path, "rb") as f:
+            data = tomllib.load(f)
+        assert data["memory"]["provider"] == "mempalace"
+        assert data["memory"]["enabled"] is False

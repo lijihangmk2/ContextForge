@@ -10,6 +10,7 @@ from ctxforge.spec.schema import (
     EnhancersSection,
     InjectionSection,
     KeyFilesSection,
+    MempalaceSection,
     ProfileConfig,
     ProfileSection,
     ProjectConfig,
@@ -26,6 +27,7 @@ class TestProjectConfig:
         assert config.cli.detected == []
         assert config.cli.active is None
         assert config.defaults.language is None
+        assert config.mempalace == MempalaceSection()
 
     def test_full(self):
         config = ProjectConfig(

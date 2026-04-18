@@ -8,7 +8,9 @@ from setproctitle import setproctitle
 from ctxforge.__version__ import __version__
 from ctxforge.console.commands.clean import clean_command
 from ctxforge.console.commands.ctx import ctx_app
+from ctxforge.console.commands.hook import hook_app
 from ctxforge.console.commands.init import init_command
+from ctxforge.console.commands.mempalace import app as mempalace_app
 from ctxforge.console.commands.profile import profile_app
 from ctxforge.console.commands.run import run_command
 from ctxforge.console.commands.tool import tool_app
@@ -47,6 +49,8 @@ app.command(name="clean")(clean_command)
 app.add_typer(profile_app, name="profile")
 app.add_typer(ctx_app, name="ctx")
 app.add_typer(tool_app, name="tool")
+app.add_typer(mempalace_app, name="mempalace")
+app.add_typer(hook_app, name="hook", hidden=True)
 
 
 def main() -> None:

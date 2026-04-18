@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 # ─── Schema versioning ─────────────────────────────────────────────────────
 
-CURRENT_PROFILE_VERSION = 6
+CURRENT_PROFILE_VERSION = 7
 CURRENT_PROJECT_VERSION = 2
 
 # ─── project.toml models ────────────────────────────────────────────────────
@@ -35,12 +35,21 @@ class ToolDefinition(BaseModel):
     setup: str = ""
 
 
+class MempalaceSection(BaseModel):
+    enabled: bool = False
+    palace_path: str = ""
+    autoload: bool = True
+    checkpoint_interval: int = 1
+    save_on_precompact: bool = True
+
+
 class ProjectConfig(BaseModel):
     schema_version: int = 1
     project: ProjectSection = Field(default_factory=ProjectSection)
     cli: CliConfig = Field(default_factory=CliConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     tools: dict[str, ToolDefinition] = Field(default_factory=dict)
+    mempalace: MempalaceSection = Field(default_factory=MempalaceSection)
 
 
 # ─── profile.toml models ────────────────────────────────────────────────────
@@ -93,6 +102,20 @@ class ToolsSection(BaseModel):
     disabled: list[str] = Field(default_factory=list)
 
 
+class MemorySection(BaseModel):
+    provider: str = "mempalace"
+    enabled: bool = False
+    scope: str = "profile"
+    namespace: str = ""
+    palace_path: str = ""
+    autoload: bool = True
+    save_on_checkpoint: bool = True
+    checkpoint_interval: int = 15
+    save_on_precompact: bool = True
+    save_on_exit: bool = False
+    cross_profile_search: bool = False
+
+
 class ProfileConfig(BaseModel):
     schema_version: int = 1
     profile: ProfileSection
@@ -104,3 +127,4 @@ class ProfileConfig(BaseModel):
     budget: BudgetSection = Field(default_factory=BudgetSection)
     enhancers: EnhancersSection = Field(default_factory=EnhancersSection)
     tools: ToolsSection = Field(default_factory=ToolsSection)
+    memory: MemorySection = Field(default_factory=MemorySection)

@@ -10,8 +10,10 @@ from typer.testing import CliRunner
 
 from ctxforge.console.application import app
 from ctxforge.core.profile import ProfileManager
+from ctxforge.core.project import Project
 from ctxforge.spec.schema import ProfileCliSection
 from ctxforge.storage.profile_writer import write_profile
+from ctxforge.storage.project_writer import write_project
 
 runner = CliRunner()
 
@@ -245,6 +247,61 @@ class TestLaunchSession:
         profile_text = profile_path.read_text(encoding="utf-8")
         assert "[key_files]" in profile_text
         assert "paths = []" in profile_text
+
+    def test_launch_session_injects_memory_context_for_new_session(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        project = Project.load(ctxforge_project)
+        project.config.mempalace.enabled = True
+        write_project(project.ctxforge_dir / "project.toml", project.config)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+
+        with (
+            patch("ctxforge.core.memory.shutil.which", return_value="/usr/bin/mempalace"),
+            patch(
+                "ctxforge.core.memory.importlib.util.find_spec",
+                return_value=object(),
+            ),
+            patch(
+                "ctxforge.console.commands.run.load_memory_preload",
+                return_value=MagicMock(
+                    status="loaded",
+                    ok=True,
+                    content="[Memory Context]\nRecovered context",
+                ),
+            ),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        cmd = mock_run.call_args[0][0]
+        injected_prompt = cmd[cmd.index("--append-system-prompt") + 1]
+        assert "[Memory Context]" in injected_prompt
+        assert "Recovered context" in injected_prompt
+
+    def test_launch_session_errors_when_memory_enabled_but_mempalace_missing(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        project = Project.load(ctxforge_project)
+        project.config.mempalace.enabled = True
+        write_project(project.ctxforge_dir / "project.toml", project.config)
+
+        with (
+            patch("ctxforge.core.memory.shutil.which", return_value=None),
+            patch("ctxforge.runner.claude.subprocess.run") as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 1
+        mock_run.assert_not_called()
 
     def test_launch_session_codex_resume_uses_saved_session(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import launch_session
@@ -867,7 +924,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.7" in result.output
+        assert "1.4.8" in result.output
 
 
 class TestSetProcTitle:

@@ -20,6 +20,13 @@ else:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib  # type: ignore[import-not-found]
 
 from ctxforge.core.injection import SimpleInjection
+from ctxforge.core.memory import (
+    build_memory_system_prompt,
+    build_mempalace_mcp_server,
+    load_memory_preload,
+    resolve_memory_binding,
+    validate_memory_runtime,
+)
 from ctxforge.core.migration import migrate_profile, needs_migration
 from ctxforge.core.profile import ProfileManager
 from ctxforge.core.project import Project
@@ -30,6 +37,7 @@ from ctxforge.runner.claude import ClaudeRunner
 from ctxforge.runner.codex import CodexRunner
 from ctxforge.runner.registry import get_runner
 from ctxforge.spec.schema import ProfileConfig
+from ctxforge.storage.claude_settings import sync_claude_memory_hooks
 from ctxforge.storage.commands_writer import write_commands
 from ctxforge.storage.profile_writer import write_profile
 
@@ -63,6 +71,7 @@ def _print_injection_summary(
     system_prompt: str,
     language: str | None,
     tool_summary: list[tuple[str, str]] | None = None,
+    memory_summary: str | None = None,
 ) -> None:
     """Print a summary of what is being injected."""
     console.print(f"[bold]ctxforge[/bold] profile=[cyan]{profile_name}[/cyan]"
@@ -93,6 +102,9 @@ def _print_injection_summary(
             else:
                 parts.append(f"[yellow]{tname} ✗[/yellow] ({tstatus})")
         console.print(f"  [dim]Tools:[/dim] {', '.join(parts)}")
+
+    if memory_summary:
+        console.print(f"  [dim]Memory:[/dim] {memory_summary}")
 
     if language:
         console.print(f"  [dim]Language:[/dim] {language}")
@@ -543,6 +555,15 @@ def launch_session(
     builder = PromptBuilder(project.root)
     language = project.config.defaults.language
     system_prompt = builder.build_system(profile_config, language)
+    memory_summary: str | None = None
+    memory_binding = resolve_memory_binding(project.root, profile_name, project.config)
+    runtime_status = validate_memory_runtime(memory_binding)
+    if not runtime_status.ok:
+        console.print(f"[red]Error:[/red] {runtime_status.message}")
+        return 1
+    memory_prompt = build_memory_system_prompt(memory_binding)
+    if memory_prompt:
+        system_prompt += "\n\n" + memory_prompt
 
     if compress:
         greeting = builder.build_compress_greeting(profile_config, language)
@@ -575,15 +596,42 @@ def launch_session(
                 lines.append(f"- {tname}{desc_part}")
             system_prompt += "\n\n" + "\n".join(lines)
 
-        mcp_config_path = build_mcp_config(profile_config, project.config)
+        mcp_config_path = build_mcp_config(
+            profile_config,
+            project.config,
+            extra_servers=build_mempalace_mcp_server(memory_binding),
+        )
+    elif memory_binding is not None:
+        mcp_config_path = build_mcp_config(
+            profile_config,
+            project.config,
+            extra_servers=build_mempalace_mcp_server(memory_binding),
+        )
+
+    if not resume_id:
+        preload = load_memory_preload(memory_binding)
+        memory_status_map = {
+            "disabled": None,
+            "loaded": f"{memory_binding.namespace} loaded" if memory_binding else None,
+            "unavailable": "configured, mempalace CLI not found",
+            "unsupported": "configured, unsupported provider",
+            "error": "configured, preload failed",
+            "empty": f"{memory_binding.namespace} empty" if memory_binding else "empty",
+        }
+        memory_summary = memory_status_map.get(preload.status)
+        if preload.ok:
+            system_prompt += "\n\n" + preload.content
 
     # ── Sync slash commands for this profile (claude only) ──────────────
     write_commands(project.root, profile_name, cli_name, profile_config)
+    if cli_name == "claude":
+        sync_claude_memory_hooks(project.root, memory_binding)
 
     if not resume_id:
         _print_injection_summary(
             profile_name, cli_name, profile_config, system_prompt, language,
             tool_summary=tool_summary,
+            memory_summary=memory_summary,
         )
 
     # Set terminal title to show the active profile

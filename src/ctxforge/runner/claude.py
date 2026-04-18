@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from ctxforge.exceptions import RunnerError
 from ctxforge.runner.base import RunResult

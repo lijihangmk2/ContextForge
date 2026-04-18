@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.8] - 2026-04-18
+
+### Added
+
+- Added project-level `ctxforge mempalace` commands to enable, inspect, and configure MemPalace integration.
+- Added profile-scoped memory preload and MemPalace MCP server injection for new AI sessions.
+- Added Claude hook syncing so ctxforge can install managed checkpoint and pre-compact memory save hooks.
+
+### Changed
+
+- Added schema support for project-level MemPalace config and profile memory defaults, including profile migration to schema v7.
+- Updated `ctxforge run` to validate MemPalace availability before launch when memory integration is enabled.
+
 ## [1.4.7] - 2026-04-07
 
 ### Fixed
