@@ -336,19 +336,32 @@ def _discover_claude_session_id(profile_dir: Path, cwd: Path) -> str | None:
     return None
 
 
-def _ask_session_action(*, allow_list: bool, allow_list_all: bool = False) -> str:
-    """Ask whether to resume, start new, or optionally list saved sessions."""
+def _ask_session_action(
+    *,
+    allow_resume: bool = True,
+    allow_list: bool,
+    allow_list_all: bool = False,
+) -> str:
+    """Ask how to start the session based on available choices."""
     if not sys.stdin.isatty():
-        return "resume"
-    if allow_list_all:
+        return "resume" if allow_resume else "new"
+    if allow_resume and allow_list_all:
         options = "Continue, start new, list project sessions, or list all? \\[C/n/l/la]: "
-    elif allow_list:
+    elif allow_resume and allow_list:
         options = "Continue, start new, or list sessions? \\[C/n/l]: "
-    else:
+    elif allow_resume:
         options = "Continue or start new? \\[C/n]: "
-    console.print("[bold]Previous session found.[/bold] " + options, end="")
+    elif allow_list_all:
+        options = "Start new, or list all? \\[N/la]: "
+    elif allow_list:
+        options = "Start new, or list sessions? \\[N/l]: "
+    else:
+        return "new"
+
+    prefix = "[bold]Previous session found.[/bold] " if allow_resume else ""
+    console.print(prefix + options, end="")
     value = sys.stdin.readline().strip().lower()
-    if not value or value in ("c", "continue", "y", "yes"):
+    if allow_resume and (not value or value in ("c", "continue", "y", "yes")):
         return "resume"
     if allow_list_all and value in ("la", "list-all", "list all"):
         return "list_all"
@@ -449,6 +462,7 @@ def _resume_with_saved_session(
 ) -> tuple[str | None, str | None]:
     """Resolve whether to resume an existing session or start a new one."""
     action = _ask_session_action(
+        allow_resume=True,
         allow_list=select_session is not None,
         allow_list_all=select_all_sessions is not None,
     )
@@ -520,6 +534,32 @@ def launch_session(
                 cwd=cwd,
             )
             if session_id:
+                _clear_session_id(profile_dir)
+        elif not compress:
+            action = _ask_session_action(
+                allow_resume=False,
+                allow_list=False,
+                allow_list_all=True,
+            )
+            if action == "list_all":
+                selected_sid = _select_codex_global_session(profile_dir, cwd)
+                if selected_sid:
+                    resume_id = selected_sid
+                    _save_session_id(profile_dir, selected_sid)
+                    _upsert_profile_session(
+                        profile_dir,
+                        selected_sid,
+                        cwd=cwd,
+                        fetch_sessions=lambda current_cwd: CodexRunner().list_sessions(
+                            cwd=current_cwd
+                        ),
+                    )
+                    console.print(f"  [dim]Resuming session {selected_sid[:8]}...[/dim]")
+                else:
+                    session_id = str(uuid.uuid4())
+                    _clear_session_id(profile_dir)
+            else:
+                session_id = str(uuid.uuid4())
                 _clear_session_id(profile_dir)
         else:
             _clear_session_id(profile_dir)

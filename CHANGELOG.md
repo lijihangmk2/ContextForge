@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.9] - 2026-04-19
+
+### Changed
+
+- Updated Codex session startup so users can still choose `N` or `la` even when the current profile has no saved session record.
+
+### Fixed
+
+- Fixed the `la` flow in `ctxforge run` so listing all Codex sessions no longer depends on an existing profile-owned session.
+
 ## [1.4.8] - 2026-04-18
 
 ### Added

@@ -540,6 +540,43 @@ class TestLaunchSession:
         assert call_args[0] == "codex"
         assert "resume" not in call_args
 
+    def test_launch_session_codex_without_saved_session_can_list_all_sessions(
+        self, ctxforge_project: Path,
+    ):
+        from ctxforge.console.commands.run import launch_session
+
+        pm = ProfileManager(ctxforge_project / ".ctxforge" / "profiles")
+        profile = pm.load("default")
+        profile.cli = ProfileCliSection(name="codex")
+        write_profile(pm.profile_path("default"), profile)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.ok = True
+        mock_result.session_id = None
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = 0
+
+        with (
+            patch(
+                "ctxforge.console.commands.run._discover_recent_codex_session_id",
+                return_value=None,
+            ),
+            patch("ctxforge.console.commands.run._ask_session_action", return_value="list_all"),
+            patch(
+                "ctxforge.console.commands.run._select_codex_global_session",
+                return_value="picked-global-codex-session",
+            ),
+            patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run,
+        ):
+            exit_code = launch_session(ctxforge_project, "default")
+
+        assert exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert call_args[:3] == ["codex", "resume", "picked-global-codex-session"]
+        session_file = pm.profile_path("default").parent / ".session"
+        assert session_file.read_text(encoding="utf-8") == "picked-global-codex-session"
+
     def test_launch_session_codex_ignores_stale_session_file_not_owned_by_profile(
         self, ctxforge_project: Path,
     ):
@@ -924,7 +961,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.8" in result.output
+        assert "1.4.9" in result.output
 
 
 class TestSetProcTitle:
@@ -938,3 +975,25 @@ class TestSetProcTitle:
 
             main()
             mock_spt.assert_called_once_with("ctxforge")
+
+
+class TestSessionActionPrompt:
+    def test_ask_session_action_without_saved_session_supports_list_all(self):
+        from ctxforge.console.commands.run import _ask_session_action
+
+        stdin = MagicMock(spec=io.StringIO)
+        stdin.readline.return_value = "la\n"
+        stdin.isatty.return_value = True
+        with (
+            patch("sys.stdin", stdin),
+            patch("ctxforge.console.commands.run.console.print") as mock_print,
+        ):
+            action = _ask_session_action(
+                allow_resume=False,
+                allow_list=False,
+                allow_list_all=True,
+            )
+
+        assert action == "list_all"
+        prompt = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
+        assert "[N/la]" in prompt
