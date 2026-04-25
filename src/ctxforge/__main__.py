@@ -1,4 +1,4 @@
-from ctxforge.console.application import main
+from ctxforge.bootstrap import main
 
 if __name__ == "__main__":
     main()

@@ -169,6 +169,208 @@ class TestInitCommand:
         ).exists()
 
 
+class TestCredCommands:
+    def test_cred_capture_and_list_marks_current(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-main"}}
+            ),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(app, ["cred", "capture", "--cli", "codex"], env=env)
+        assert result.exit_code == 0, result.output
+
+        result = runner.invoke(app, ["cred", "list"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "codex" in result.output
+        assert "acct-main" in result.output
+        assert "yes" in result.output
+
+    def test_cred_capture_first_time_allows_rename_via_onboarding(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-main"}}
+            ),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            app,
+            ["cred", "capture", "--cli", "codex"],
+            input="renamed-account\n",
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        assert "Captured" in result.output
+        assert "renamed-account" in result.output
+
+    def test_cred_switch_warns_sessions_must_restart(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        first = runner.invoke(app, ["cred", "capture", "acct-a", "--cli", "codex"], env=env)
+        assert first.exit_code == 0, first.output
+
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-b"}}
+            ),
+            encoding="utf-8",
+        )
+        second = runner.invoke(app, ["cred", "capture", "acct-b", "--cli", "codex"], env=env)
+        assert second.exit_code == 0, second.output
+
+        result = runner.invoke(app, ["cred", "switch", "acct-a", "--cli", "codex"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "must be restarted" in result.output
+
+    def test_cred_remove_without_args_uses_single_managed_entry(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        captured = runner.invoke(app, ["cred", "capture", "acct-a", "--cli", "codex"], env=env)
+        assert captured.exit_code == 0, captured.output
+
+        switched_live = runner.invoke(app, ["cred", "status"], env=env)
+        assert switched_live.exit_code == 0, switched_live.output
+
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "unmanaged"}}
+            ),
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(app, ["cred", "remove", "--cli", "codex", "--yes"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "Removed codex:acct-a" in result.output
+
+    def test_cred_capture_second_time_allows_rename(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        first = runner.invoke(app, ["cred", "capture", "--cli", "codex"], env=env)
+        assert first.exit_code == 0, first.output
+
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-b"}}
+            ),
+            encoding="utf-8",
+        )
+        second = runner.invoke(
+            app,
+            ["cred", "capture", "--cli", "codex"],
+            input="renamed-b\n",
+            env=env,
+        )
+        assert second.exit_code == 0, second.output
+        assert "renamed-b" in second.output
+
+    def test_cred_capture_reprompts_when_default_name_conflicts(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        first = runner.invoke(app, ["cred", "capture", "--cli", "codex"], env=env)
+        assert first.exit_code == 0, first.output
+
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        second = runner.invoke(
+            app,
+            ["cred", "capture", "--cli", "codex"],
+            input="\nacct-a-2\n",
+            env=env,
+        )
+        assert second.exit_code == 0, second.output
+        assert "already exists" in second.output
+        assert "acct-a-2" in second.output
+
+    def test_cred_clean_removes_managed_store(self, tmp_path: Path):
+        home = tmp_path / "home"
+        env = {
+            "HOME": str(home),
+            "CTXFORGE_HOME": str(home / ".ctxforge"),
+        }
+        auth_path = home / ".codex" / "auth.json"
+        auth_path.parent.mkdir(parents=True, exist_ok=True)
+        auth_path.write_text(
+            json.dumps(
+                {"auth_mode": "login", "tokens": {"account_id": "acct-a"}}
+            ),
+            encoding="utf-8",
+        )
+        captured = runner.invoke(app, ["cred", "capture", "--cli", "codex"], env=env)
+        assert captured.exit_code == 0, captured.output
+
+        result = runner.invoke(app, ["cred", "clean", "--yes"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "Cleaned" in result.output
+
+        listed = runner.invoke(app, ["cred", "list"], env=env)
+        assert listed.exit_code == 0, listed.output
+        assert "No managed credentials found" in listed.output
+
+
 class TestLaunchSession:
     def test_launch_session_normal(self, ctxforge_project: Path):
         mock_result = MagicMock()
@@ -302,6 +504,40 @@ class TestLaunchSession:
 
         assert exit_code == 1
         mock_run.assert_not_called()
+
+    def test_run_command_debug_memory_prints_diagnostics(
+        self, ctxforge_project: Path, monkeypatch,
+    ):
+        project = Project.load(ctxforge_project)
+        project.config.mempalace.enabled = True
+        write_project(project.ctxforge_dir / "project.toml", project.config)
+        monkeypatch.chdir(ctxforge_project)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with (
+            patch("ctxforge.core.memory.shutil.which", return_value="/usr/bin/mempalace"),
+            patch(
+                "ctxforge.core.memory.importlib.util.find_spec",
+                return_value=object(),
+            ),
+            patch(
+                "ctxforge.console.commands.run.load_memory_preload",
+                return_value=MagicMock(
+                    status="empty",
+                    ok=False,
+                    content="",
+                ),
+            ),
+            patch("ctxforge.runner.claude.subprocess.run", return_value=mock_result),
+        ):
+            result = runner.invoke(app, ["run", "--debug-memory"])
+
+        assert result.exit_code == 0, result.output
+        assert "Memory Debug" in result.output
+        assert "Preload status:" in result.output
+        assert "MCP config:" in result.output
 
     def test_launch_session_codex_resume_uses_saved_session(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import launch_session
@@ -961,7 +1197,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.9" in result.output
+        assert "1.4.10" in result.output
 
 
 class TestSetProcTitle:

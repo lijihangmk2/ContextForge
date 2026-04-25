@@ -27,3 +27,7 @@ class CliNotFoundError(CForgeError):
 
 class RunnerError(CForgeError):
     """Raised when a CLI runner fails to execute."""
+
+
+class CredentialError(CForgeError):
+    """Raised when credential management fails."""

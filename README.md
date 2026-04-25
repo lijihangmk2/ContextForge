@@ -42,53 +42,31 @@ ctxforge run
 | `ctxforge ctx files [PROFILE]` | List key files with size info |
 | `ctxforge ctx update [PROFILE] [--all]` | AI updates stale key files |
 | `ctxforge ctx compress [PROFILE] [--all]` | AI compresses verbose key files |
+| `ctxforge cred …` | Manage system-level Claude/Codex credentials |
 | `ctxforge clean [PATH]` | Remove all ctxforge configuration |
 
-## MCP Tools
+## Credential Management
 
-ctxforge manages [MCP](https://modelcontextprotocol.io/) tools for AI sessions. Tools are registered at project level and available to all profiles by default.
-
-```bash
-ctxforge tool search puppeteer          # Search the MCP registry
-ctxforge tool add puppeteer             # Add from registry (auto-setup)
-ctxforge tool add https://github.com/…  # Add from GitHub URL
-ctxforge tool list                      # Show registered tools
-ctxforge tool disable puppeteer -p rev  # Disable for a profile
-```
-
-Other subcommands: `setup`, `check`, `enable`, `remove`. Run `ctxforge tool --help` for details.
-
-## MemPalace
-
-ctxforge can enable project-level [MemPalace](https://github.com/milla-jovovich/mempalace) integration.
-
-MemPalace is a separate dependency. Install it first:
+`ctxforge cred` is system-level and intentionally separate from project config.
+Managed credentials live under `~/.ctxforge/credentials/` and do not modify `.ctxforge/project.toml`.
 
 ```bash
-pip install mempalace
-```
-
-Then enable it for the project:
-
-```bash
-ctxforge mempalace enable
-ctxforge mempalace status
-ctxforge mempalace disable
-ctxforge mempalace set interval 5
+ctxforge cred capture --cli claude
+ctxforge cred list
+ctxforge cred switch dev@example.com --cli claude
+ctxforge cred clean
 ```
 
 Behavior:
 
-- Enable checks that `mempalace` is actually installed and runnable. If not, enable fails.
-- `ctxforge mempalace status` also reports whether the runtime is currently available.
-- Each profile still gets its own memory namespace and wing inside one project-level palace.
-- `ctxforge run` preloads relevant memory for new sessions.
-- When using Claude, ctxforge also installs profile-scoped memory hooks into `.claude/settings.local.json` for checkpoint and pre-compact saves.
-- Default behavior is to save after every user message (`checkpoint_interval = 1`).
-- You can change that with `ctxforge mempalace set interval N` after MemPalace is enabled.
-- Key files and work-record files still take priority over recalled memory.
-
-If MemPalace is enabled in the project but `mempalace` is not installed, `ctxforge run` will refuse to start.
+- `capture`, `switch`, and `remove` support explicit arguments. `switch` and `remove` also support interactive fallback when arguments are omitted.
+- The first `capture` for one CLI runs an onboarding flow.
+- When `capture` is called without `NAME`, ctxforge shows a default name derived from the CLI's unique identifier and lets the user rename it before storing.
+- If that suggested name already exists, ctxforge keeps prompting for a new name instead of failing immediately.
+- `list` shows which managed credential is currently active by comparing live auth files with stored snapshots.
+- `clean` removes ctxforge-managed snapshots only. It does not delete the user's live native auth files.
+- After `switch`, any currently running Claude/Codex sessions must be restarted.
+- Current tracked files are `~/.claude/.credentials.json`, `~/.claude.json`, and `~/.codex/auth.json`.
 
 ## Minimal Example
 

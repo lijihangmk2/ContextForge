@@ -7,6 +7,7 @@ from setproctitle import setproctitle
 
 from ctxforge.__version__ import __version__
 from ctxforge.console.commands.clean import clean_command
+from ctxforge.console.commands.cred import cred_app
 from ctxforge.console.commands.ctx import ctx_app
 from ctxforge.console.commands.hook import hook_app
 from ctxforge.console.commands.init import init_command
@@ -46,6 +47,7 @@ def main_callback(
 app.command(name="init")(init_command)
 app.command(name="run")(run_command)
 app.command(name="clean")(clean_command)
+app.add_typer(cred_app, name="cred")
 app.add_typer(profile_app, name="profile")
 app.add_typer(ctx_app, name="ctx")
 app.add_typer(tool_app, name="tool")

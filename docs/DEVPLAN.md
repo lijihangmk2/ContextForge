@@ -1,5 +1,7 @@
 # ctxforge 开发计划 v4
 
+> 注：`tool` 与 `mempalace` 子模块当前存在稳定性问题，已从公开 README / PyPI 文案中移除；本计划仍保留相关条目，作为内部修复参考。
+
 ## 工程原则
 
 1. **每个能力必须是独立模块** — 单向依赖，模块可独立测试
@@ -25,6 +27,7 @@ src/ctxforge/
 │       ├── run.py               # ctxforge run
 │       ├── profile.py           # ctxforge profile {create,list,show}
 │       ├── ctx.py               # ctxforge ctx {profile,files,update,compress}
+│       ├── cred.py              # ctxforge cred {list,status,capture,switch,remove,clean}
 │       ├── tool.py              # ctxforge tool {search,add,setup,list,remove,check,enable,disable}
 │       └── clean.py             # ctxforge clean
 │
@@ -38,6 +41,8 @@ src/ctxforge/
 │   ├── migration.py             # Schema 迁移（版本检测 + 交互式升级）
 │   ├── injection.py             # SimpleInjection（上下文注入 + greeting）
 │   ├── prompt_builder.py        # PromptBuilder（高级 API）
+│   ├── memory.py                # MemPalace binding / preload / runtime checks
+│   ├── credentials.py           # 系统级 Claude/Codex 凭证托管与切换
 │   ├── toolchain.py             # 工具可用性检查 + MCP 配置生成
 │   └── registry.py              # MCP Registry API 客户端（搜索 + GitHub URL 解析）
 │
@@ -56,7 +61,8 @@ src/ctxforge/
 ├── storage/                     # 文件写入
 │   ├── project_writer.py        # 写 project.toml
 │   ├── profile_writer.py        # 写 profile.toml
-│   └── commands_writer.py       # 生成 .claude/commands/ctx-*.md
+│   ├── commands_writer.py       # 生成 .claude/commands/ctx-*.md
+│   └── claude_settings.py       # 写入 Claude memory hooks
 │
 └── llm/                         # LLM SDK 集成（可选，非主流程）
     ├── provider.py              # 多 provider 调度 (OpenAI/Anthropic/Google)
@@ -112,6 +118,7 @@ llm/（独立，不被主流程依赖）
 - [x] `core/migration.py`：Schema 迁移框架（v1→v2 CLI下沉、v2→v3 work_record、v3→v4 tools、v4→v5 tools disabled）
 - [x] `core/injection.py`：SimpleInjection（build / build_system / build_greeting）
 - [x] `core/prompt_builder.py`：PromptBuilder 高级 API
+- [x] `core/memory.py`：MemPalace binding / preload / MCP server / runtime 校验
 - [x] `core/toolchain.py`：工具可用性检查 + MCP config JSON 生成
 - [x] `core/registry.py`：MCP Registry API 搜索 + GitHub server.json 解析
 
@@ -130,6 +137,9 @@ llm/（独立，不被主流程依赖）
 - [x] `tool search/add/setup/list/check/remove/enable/disable`：MCP 工具全生命周期管理
 - [x] MCP Registry 集成：搜索 + GitHub URL 导入 + 自动 setup
 - [x] 工具默认全 profile 可用（disabled 排除模型），可用工具自动注入 system prompt
+- [x] `mempalace enable/status/disable/set interval/debug`：项目级 MemPalace 集成与诊断
+- [x] `run --debug-memory`：打印 MemPalace wiring / preload / hook 诊断信息
+- [x] `cred list/status/capture/switch/remove/clean`：系统级 Claude/Codex 多凭证托管与切换
 
 **验收**：`ctxforge init` + `ctxforge run` 闭环可用，schema_version 自动迁移 ✅
 
@@ -141,6 +151,7 @@ llm/（独立，不被主流程依赖）
 
 - [ ] **run --cli 参数**：临时切换 AI CLI
 - [ ] **run --verbose**：打印完整系统提示（调试用）
+- [x] **run --debug-memory**：打印 MemPalace 调试信息
 - [ ] **profile edit**：交互式编辑现有 Profile
 - [ ] **profile delete**：删除 Profile
 - [ ] **init --non-interactive**：非交互模式，用默认值
@@ -154,6 +165,7 @@ llm/（独立，不被主流程依赖）
 - [x] `runner/codex.py`：Codex CLI 封装（run + run_oneshot）
 - [ ] `runner/aider.py`：Aider CLI 封装
 - [ ] Codex slash commands：Codex 目前无自定义命令机制，slash commands 仅对 Claude 生效，待 Codex 支持后适配
+- [ ] Codex MemPalace 支持闭环：透传 `mcp_config`，或设计等效的自动保存路径
 
 ---
 

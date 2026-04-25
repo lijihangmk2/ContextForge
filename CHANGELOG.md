@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.10] - 2026-04-25
+
+### Changed
+
+- Removed `tool` and `mempalace` feature promotion from the public README and PyPI-facing docs while those submodules remain unstable.
+- Aligned internal design and development docs to mark `tool` and `mempalace` as temporarily non-public functionality.
+
 ## [1.4.9] - 2026-04-19
 
 ### Changed

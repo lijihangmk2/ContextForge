@@ -114,6 +114,66 @@ def _print_injection_summary(
     console.print()
 
 
+def _print_memory_debug(
+    *,
+    cli_name: str,
+    resume_id: str | None,
+    memory_binding: object | None,
+    runtime_ok: bool,
+    runtime_message: str,
+    memory_prompt: str,
+    preload_status: str | None,
+    preload_ok: bool,
+    mcp_config_path: Path | None,
+    profile_root: Path,
+) -> None:
+    """Print detailed MemPalace diagnostics for troubleshooting."""
+    console.print("[bold]Memory Debug[/bold]")
+    console.print(f"  [dim]CLI:[/dim] {cli_name}")
+    console.print(f"  [dim]Resume:[/dim] {'yes' if resume_id else 'no'}")
+    console.print(f"  [dim]Runtime:[/dim] {'ok' if runtime_ok else 'error'}")
+    if runtime_message:
+        console.print(f"  [dim]Runtime message:[/dim] {runtime_message}")
+
+    if memory_binding is None:
+        console.print("  [dim]Binding:[/dim] disabled")
+    else:
+        console.print(f"  [dim]Namespace:[/dim] {memory_binding.namespace}")
+        console.print(f"  [dim]Wing:[/dim] {memory_binding.wing}")
+        console.print(f"  [dim]Palace path:[/dim] {memory_binding.palace_path}")
+        console.print(
+            f"  [dim]Palace exists:[/dim] "
+            f"{'yes' if memory_binding.palace_path.exists() else 'no'}"
+        )
+        console.print(
+            f"  [dim]Memory prompt injected:[/dim] "
+            f"{'yes' if bool(memory_prompt) else 'no'}"
+        )
+        console.print(f"  [dim]Preload status:[/dim] {preload_status or 'skipped'}")
+        console.print(f"  [dim]Preload content injected:[/dim] {'yes' if preload_ok else 'no'}")
+
+    console.print(
+        f"  [dim]MCP config:[/dim] {mcp_config_path if mcp_config_path else 'none'}"
+    )
+    if cli_name == "claude":
+        settings_path = profile_root / ".claude" / "settings.local.json"
+        hook_text = ""
+        if settings_path.exists():
+            try:
+                hook_text = settings_path.read_text(encoding="utf-8")
+            except OSError:
+                hook_text = ""
+        console.print(
+            f"  [dim]Claude memory hooks:[/dim] "
+            f"{'present' if 'ctxforge hook memory' in hook_text else 'missing'}"
+        )
+    elif cli_name == "codex":
+        console.print("  [dim]Codex MCP handoff:[/dim] unsupported by current runner")
+        console.print("  [dim]Autosave hooks:[/dim] unsupported outside Claude")
+
+    console.print()
+
+
 def _ensure_migrated(
     pm: ProfileManager,
     profile_name: str,
@@ -499,6 +559,7 @@ def launch_session(
     project_root: Path,
     profile_name: str,
     compress: bool = False,
+    debug_memory: bool = False,
 ) -> int:
     """Launch an AI CLI session. Returns exit code."""
     project = Project.load(project_root)
@@ -604,6 +665,8 @@ def launch_session(
     memory_prompt = build_memory_system_prompt(memory_binding)
     if memory_prompt:
         system_prompt += "\n\n" + memory_prompt
+    preload_status: str | None = None
+    preload_ok = False
 
     if compress:
         greeting = builder.build_compress_greeting(profile_config, language)
@@ -650,6 +713,8 @@ def launch_session(
 
     if not resume_id:
         preload = load_memory_preload(memory_binding)
+        preload_status = preload.status
+        preload_ok = preload.ok
         memory_status_map = {
             "disabled": None,
             "loaded": f"{memory_binding.namespace} loaded" if memory_binding else None,
@@ -666,6 +731,20 @@ def launch_session(
     write_commands(project.root, profile_name, cli_name, profile_config)
     if cli_name == "claude":
         sync_claude_memory_hooks(project.root, memory_binding)
+
+    if debug_memory:
+        _print_memory_debug(
+            cli_name=cli_name,
+            resume_id=resume_id,
+            memory_binding=memory_binding,
+            runtime_ok=runtime_status.ok,
+            runtime_message=runtime_status.message,
+            memory_prompt=memory_prompt,
+            preload_status=preload_status,
+            preload_ok=preload_ok,
+            mcp_config_path=mcp_config_path,
+            profile_root=project.root,
+        )
 
     if not resume_id:
         _print_injection_summary(
@@ -752,6 +831,11 @@ def run_command(
     profile: str | None = typer.Argument(
         None, help="Profile name (uses default if omitted)."
     ),
+    debug_memory: bool = typer.Option(
+        False,
+        "--debug-memory",
+        help="Print MemPalace wiring and preload diagnostics before launch.",
+    ),
 ) -> None:
     """Start an interactive AI CLI session with profile context injection.
 
@@ -788,6 +872,6 @@ def run_command(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    exit_code = launch_session(project.root, resolved)
+    exit_code = launch_session(project.root, resolved, debug_memory=debug_memory)
     if exit_code != 0:
         raise typer.Exit(exit_code)
