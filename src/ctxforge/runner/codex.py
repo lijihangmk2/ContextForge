@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -31,6 +33,10 @@ class CodexRunner:
 
     Codex does not support a ``--system-prompt`` flag, so the context is
     combined into the initial ``[PROMPT]`` positional argument.
+
+    On Windows, npm's ``codex.cmd`` shim expands ``%*`` without preserving
+    multi-line arguments. Launching the underlying Node entrypoint directly
+    keeps the combined prompt intact.
     """
 
     name: str = "codex"
@@ -48,7 +54,7 @@ class CodexRunner:
         *system_prompt* and *initial_prompt* are merged into a single
         positional argument since Codex only accepts ``[PROMPT]``.
         """
-        cmd: list[str] = ["codex"]
+        cmd: list[str] = self._base_command()
         if auto_approve:
             cmd.append("--dangerously-bypass-approvals-and-sandbox")
         started_at = datetime.now(timezone.utc)
@@ -96,7 +102,7 @@ class CodexRunner:
         mcp_config: Path | None = None,
     ) -> RunResult:
         """Run a single non-interactive ``codex`` command."""
-        cmd: list[str] = ["codex"]
+        cmd: list[str] = self._base_command()
         if auto_approve:
             cmd.append("--dangerously-bypass-approvals-and-sandbox")
         cmd.append(prompt)
@@ -109,6 +115,28 @@ class CodexRunner:
             raise RunnerError(f"Failed to run codex: {e}") from e
 
         return RunResult(exit_code=proc.returncode, stdout="", stderr="")
+
+    @staticmethod
+    def _base_command() -> list[str]:
+        """Return a Codex command that preserves argv on the current platform."""
+        if sys.platform != "win32":
+            return ["codex"]
+
+        codex_cmd = shutil.which("codex.cmd") or shutil.which("codex")
+        if not codex_cmd:
+            return ["codex"]
+
+        basedir = Path(codex_cmd).parent
+        script = basedir / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+        if not script.exists():
+            return ["codex"]
+
+        local_node = basedir / "node.exe"
+        if local_node.exists():
+            node = str(local_node)
+        else:
+            node = shutil.which("node.exe") or shutil.which("node") or "node"
+        return [node, str(script)]
 
     def find_latest_session_id(
         self, cwd: Path, *, since: datetime | None = None,

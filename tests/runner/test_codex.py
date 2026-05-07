@@ -14,6 +14,7 @@ from ctxforge.runner.codex import CodexRunner
 class TestCodexRunner:
     def test_run_success(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_proc = MagicMock()
         mock_proc.poll.side_effect = [None, 0]
         mock_proc.wait.return_value = 0
@@ -21,7 +22,7 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context")
             mock_run.assert_called_once_with(
-                ["codex", "system context"],
+                [*base_cmd, "system context"],
             )
         assert result.ok
         assert result.stdout == ""
@@ -29,6 +30,7 @@ class TestCodexRunner:
 
     def test_run_with_initial_prompt(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_proc = MagicMock()
         mock_proc.poll.side_effect = [None, 0]
         mock_proc.wait.return_value = 0
@@ -36,12 +38,13 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", "hello")
             mock_run.assert_called_once_with(
-                ["codex", "system context\n\nhello"],
+                [*base_cmd, "system context\n\nhello"],
             )
         assert result.ok
 
     def test_run_auto_approve(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_proc = MagicMock()
         mock_proc.poll.side_effect = [None, 0]
         mock_proc.wait.return_value = 0
@@ -49,30 +52,32 @@ class TestCodexRunner:
         with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", auto_approve=True)
             mock_run.assert_called_once_with(
-                ["codex", "--dangerously-bypass-approvals-and-sandbox", "system context"],
+                [*base_cmd, "--dangerously-bypass-approvals-and-sandbox", "system context"],
             )
         assert result.ok
 
     def test_run_empty_system_prompt(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_proc = MagicMock()
         mock_proc.poll.side_effect = [None, 0]
         mock_proc.wait.return_value = 0
 
         with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("")
-            mock_run.assert_called_once_with(["codex"])
+            mock_run.assert_called_once_with(base_cmd)
         assert result.ok
 
     def test_run_resume_session(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_proc = MagicMock()
         mock_proc.wait.return_value = 0
 
         with patch("ctxforge.runner.codex.subprocess.Popen", return_value=mock_proc) as mock_run:
             result = runner.run("system context", "hello", resume_id="abc-123")
             mock_run.assert_called_once_with(
-                ["codex", "resume", "abc-123"],
+                [*base_cmd, "resume", "abc-123"],
             )
         assert result.ok
 
@@ -121,6 +126,8 @@ class TestCodexRunner:
 
     def test_list_sessions_sorted_by_modified_time(self, tmp_path: Path):
         runner = CodexRunner()
+        repo_cwd = tmp_path / "repo"
+        repo_cwd.mkdir()
         sessions_root = tmp_path / ".codex" / "sessions" / "2026" / "04" / "01"
         sessions_root.mkdir(parents=True)
 
@@ -131,7 +138,7 @@ class TestCodexRunner:
                     "type": "session_meta",
                     "payload": {
                         "id": "older-session",
-                        "cwd": "/repo",
+                        "cwd": str(repo_cwd.resolve()),
                         "timestamp": "2026-04-01T00:00:00Z",
                     },
                 }
@@ -145,7 +152,7 @@ class TestCodexRunner:
                     "type": "session_meta",
                     "payload": {
                         "id": "newer-session",
-                        "cwd": "/repo",
+                        "cwd": str(repo_cwd.resolve()),
                         "timestamp": "2026-03-20T00:00:00Z",
                     },
                 }
@@ -164,7 +171,7 @@ class TestCodexRunner:
         os.utime(newer, (newer_time, newer_time))
 
         with patch("ctxforge.runner.codex.Path.home", return_value=tmp_path):
-            sessions = runner.list_sessions(cwd=Path("/repo"))
+            sessions = runner.list_sessions(cwd=repo_cwd)
 
         assert [session.session_id for session in sessions] == [
             "newer-session",
@@ -173,6 +180,8 @@ class TestCodexRunner:
 
     def test_list_sessions_extracts_preview_from_last_message(self, tmp_path: Path):
         runner = CodexRunner()
+        repo_cwd = tmp_path / "repo"
+        repo_cwd.mkdir()
         sessions_root = tmp_path / ".codex" / "sessions" / "2026" / "04" / "01"
         sessions_root.mkdir(parents=True)
 
@@ -185,7 +194,7 @@ class TestCodexRunner:
                             "type": "session_meta",
                             "payload": {
                                 "id": "preview-session",
-                                "cwd": "/repo",
+                                "cwd": str(repo_cwd.resolve()),
                                 "timestamp": "2026-04-01T00:00:00Z",
                             },
                         }
@@ -207,7 +216,7 @@ class TestCodexRunner:
         )
 
         with patch("ctxforge.runner.codex.Path.home", return_value=tmp_path):
-            sessions = runner.list_sessions(cwd=Path("/repo"))
+            sessions = runner.list_sessions(cwd=repo_cwd)
 
         assert len(sessions) == 1
         assert "恢复哪个 session" in sessions[0].preview
@@ -231,25 +240,27 @@ class TestCodexRunner:
 
     def test_run_oneshot_success(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_result = MagicMock()
         mock_result.returncode = 0
 
         with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
             result = runner.run_oneshot("compress key files")
             mock_run.assert_called_once_with(
-                ["codex", "compress key files"],
+                [*base_cmd, "compress key files"],
             )
         assert result.ok
 
     def test_run_oneshot_auto_approve(self):
         runner = CodexRunner()
+        base_cmd = runner._base_command()
         mock_result = MagicMock()
         mock_result.returncode = 0
 
         with patch("ctxforge.runner.codex.subprocess.run", return_value=mock_result) as mock_run:
             result = runner.run_oneshot("compress key files", auto_approve=True)
             mock_run.assert_called_once_with(
-                ["codex", "--dangerously-bypass-approvals-and-sandbox", "compress key files"],
+                [*base_cmd, "--dangerously-bypass-approvals-and-sandbox", "compress key files"],
             )
         assert result.ok
 
@@ -261,3 +272,19 @@ class TestCodexRunner:
 
     def test_name(self):
         assert CodexRunner.name == "codex"
+
+    def test_windows_base_command_bypasses_npm_cmd_shim(self, tmp_path: Path):
+        npm_dir = tmp_path / "npm"
+        script = npm_dir / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+        node = npm_dir / "node.exe"
+        node.write_text("", encoding="utf-8")
+        codex_cmd = npm_dir / "codex.cmd"
+        codex_cmd.write_text("@echo off\n", encoding="utf-8")
+
+        with (
+            patch("ctxforge.runner.codex.sys.platform", "win32"),
+            patch("ctxforge.runner.codex.shutil.which", return_value=str(codex_cmd)),
+        ):
+            assert CodexRunner._base_command() == [str(node), str(script)]
