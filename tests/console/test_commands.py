@@ -564,8 +564,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "real-codex-session"]
-        assert len(call_args) == 3
+        assert call_args[-2:] == ["resume", "real-codex-session"]
 
     def test_launch_session_claude_resume_uses_saved_session(self, ctxforge_project: Path):
         from ctxforge.console.commands.run import launch_session
@@ -773,7 +772,6 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[0] == "codex"
         assert "resume" not in call_args
 
     def test_launch_session_codex_without_saved_session_can_list_all_sessions(
@@ -809,7 +807,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "picked-global-codex-session"]
+        assert call_args[-2:] == ["resume", "picked-global-codex-session"]
         session_file = pm.profile_path("default").parent / ".session"
         assert session_file.read_text(encoding="utf-8") == "picked-global-codex-session"
 
@@ -853,7 +851,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "owned-codex-session"]
+        assert call_args[-2:] == ["resume", "owned-codex-session"]
 
     def test_launch_session_codex_list_sessions_selects_choice(
         self, ctxforge_project: Path,
@@ -888,7 +886,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "picked-codex-session"]
+        assert call_args[-2:] == ["resume", "picked-codex-session"]
         session_file = pm.profile_path("default").parent / ".session"
         assert session_file.read_text(encoding="utf-8") == "picked-codex-session"
 
@@ -925,7 +923,7 @@ class TestLaunchSession:
 
         assert exit_code == 0
         call_args = mock_run.call_args[0][0]
-        assert call_args[:3] == ["codex", "resume", "picked-global-codex-session"]
+        assert call_args[-2:] == ["resume", "picked-global-codex-session"]
         session_file = pm.profile_path("default").parent / ".session"
         assert session_file.read_text(encoding="utf-8") == "picked-global-codex-session"
 
@@ -1197,7 +1195,7 @@ class TestCleanCommand:
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
-        assert "1.4.10" in result.output
+        assert "1.4.11" in result.output
 
 
 class TestSetProcTitle:

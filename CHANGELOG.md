@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.11] - 2026-05-07
+
+### Fixed
+
+- Fixed Codex launch on Windows so multi-line prompt arguments are preserved when Codex is installed through npm.
+- Updated Codex session tests to use platform-native temporary paths on Windows.
+
 ## [1.4.10] - 2026-04-25
 
 ### Changed
